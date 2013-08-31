@@ -1,16 +1,14 @@
-PPSSPP - a fast and portable PSP emulator
+PPSSPP - PSP模拟器中文版
 =========================================
 
-Written by Henrik Rydgård
+原作者 Henrik Rydgård
+
+中文版开发作者 Kaienfr
 
 Released under the GPL 2.0 in November 2012
 
 Official website:
 http://www.ppsspp.org/
-
-To contribute, see [the development page][ppsspp-devel].
-
-For the latest source code and build instructions, see [our github page][ppsspp-repo].
 
 Basic build instructions
 ------------------------
