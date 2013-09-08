@@ -35,6 +35,8 @@
 #include "UI/GameSettingsScreen.h"
 #include "UI/CwCheatScreen.h"
 #include "UI/MiscScreens.h"
+#include "UI/ControlMappingScreen.h"
+#include "UI/PluginScreen.h"
 #include "UI/ui_atlas.h"
 #include "Core/Config.h"
 #include "GPU/GPUInterface.h"
@@ -554,8 +556,11 @@ void MainScreen::sendMessage(const char *message, const char *value) {
 	if (!strcmp(message, "language")) {
 		RecreateViews();
 	}
-	if (!strcmp(message, "clearrecentlist")){
-		RecreateViews();
+	if (!strcmp(message, "control mapping")) {
+		screenManager()->push(new ControlMappingScreen());
+	}
+	if (!strcmp(message, "settings")) {
+		screenManager()->push(new GameSettingsScreen(""));
 	}
 }
 
@@ -594,11 +599,20 @@ UI::EventReturn MainScreen::OnGameSettings(UI::EventParams &e) {
 	// screenManager()->push(new SettingsScreen());
 	auto gameSettings = new GameSettingsScreen("", "");
 	gameSettings->OnLanguageChanged.Handle(this, &MainScreen::OnLanguageChange);
+	gameSettings->OnRecentChanged.Handle(this, &MainScreen::OnRecentChange);
 	screenManager()->push(gameSettings);
 	return UI::EVENT_DONE;
 }
 
 UI::EventReturn MainScreen::OnLanguageChange(UI::EventParams &e) {
+	RecreateViews();
+	if (host) {
+		host->UpdateUI();
+	}
+	return UI::EVENT_DONE;
+}
+
+UI::EventReturn MainScreen::OnRecentChange(UI::EventParams &e) {
 	RecreateViews();
 	if (host) {
 		host->UpdateUI();
@@ -684,10 +698,11 @@ void GamePauseScreen::CreateViews() {
 	leftColumn->Add(leftColumnItems);
 
 	saveSlots_ = leftColumnItems->Add(new ChoiceStrip(ORIENT_HORIZONTAL, new LinearLayoutParams(300, WRAP_CONTENT)));
-	saveSlots_->AddChoice("  1  ");
-	saveSlots_->AddChoice("  2  ");
-	saveSlots_->AddChoice("  3  ");
-	saveSlots_->AddChoice("  4  ");
+	saveSlots_->AddChoice(" 1 ");
+	saveSlots_->AddChoice(" 2 ");
+	saveSlots_->AddChoice(" 3 ");
+	saveSlots_->AddChoice(" 4 ");
+	saveSlots_->AddChoice(" 5 ");
 	saveSlots_->SetSelection(g_Config.iCurrentStateSlot);
 	saveSlots_->OnChoice.Handle(this, &GamePauseScreen::OnStateSelected);
 	

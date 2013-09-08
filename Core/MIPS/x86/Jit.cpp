@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <iterator>
+
 #include "Common/ChunkFile.h"
 #include "Core/Core.h"
 #include "Core/System.h"
@@ -31,8 +32,8 @@
 #include "RegCache.h"
 #include "Jit.h"
 
-#include "../../Host.h"
-#include "../../Debugger/Breakpoints.h"
+#include "Core/Host.h"
+#include "Core/Debugger/Breakpoints.h"
 
 namespace MIPSComp
 {
@@ -229,8 +230,12 @@ void Jit::CompileAt(u32 addr)
 void Jit::EatInstruction(MIPSOpcode op)
 {
 	MIPSInfo info = MIPSGetInfo(op);
-	_dbg_assert_msg_(JIT, !(info & DELAYSLOT), "Never eat a branch op.");
-	_dbg_assert_msg_(JIT, !js.inDelaySlot, "Never eat an instruction inside a delayslot.");
+	if (info & DELAYSLOT) {
+		ERROR_LOG_REPORT_ONCE(ateDelaySlot, JIT, "Ate a branch op.");
+	}
+	if (js.inDelaySlot) {
+		ERROR_LOG_REPORT_ONCE(ateInDelaySlot, JIT, "Ate an instruction inside a delay slot.")
+	}
 
 	CheckJitBreakpoint(js.compilerPC + 4, 0);
 	js.numInstructions++;
@@ -266,7 +271,7 @@ void Jit::RunLoopUntil(u64 globalticks)
 {
 	// TODO: copy globalticks somewhere
 	((void (*)())asm_.enterCode)();
-	// NOTICE_LOG(HLE, "Exited jitted code at %i, corestate=%i, dc=%i", CoreTiming::GetTicks() / 1000, (int)coreState, CoreTiming::downcount);
+	// NOTICE_LOG(JIT, "Exited jitted code at %i, corestate=%i, dc=%i", CoreTiming::GetTicks() / 1000, (int)coreState, CoreTiming::downcount);
 }
 
 const u8 *Jit::DoJit(u32 em_address, JitBlock *b)
@@ -347,7 +352,7 @@ const u8 *Jit::DoJit(u32 em_address, JitBlock *b)
 void Jit::Comp_RunBlock(MIPSOpcode op)
 {
 	// This shouldn't be necessary, the dispatcher should catch us before we get here.
-	ERROR_LOG(DYNA_REC, "Comp_RunBlock");
+	ERROR_LOG(JIT, "Comp_RunBlock");
 }
 
 void Jit::Comp_Generic(MIPSOpcode op)
@@ -582,7 +587,7 @@ OpArg Jit::JitSafeMem::NextFastAddress(int suboffset)
 #endif
 	}
 
-	_dbg_assert_msg_(HLE, (suboffset & alignMask_) == suboffset, "suboffset must be aligned");
+	_dbg_assert_msg_(JIT, (suboffset & alignMask_) == suboffset, "suboffset must be aligned");
 
 #ifdef _M_IX86
 	return MDisp(xaddr_, (u32) Memory::base + offset_ + suboffset);

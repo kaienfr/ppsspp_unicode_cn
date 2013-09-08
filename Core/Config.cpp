@@ -181,7 +181,7 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename)
 	control->Get("ShowTouchControls", &bShowTouchControls, pixel_xres != pixel_yres);
 #elif defined(USING_GLES2)
 	std::string name = System_GetProperty(SYSPROP_NAME);
-	if (name == "NVIDIA:SHIELD" || name == "Sony Ericsson:R800i" || name == "Sony Ericsson:zeus") {
+	if (KeyMap::HasBuiltinController(name)) {
 		control->Get("ShowTouchControls", &bShowTouchControls, false);
 	} else {
 		control->Get("ShowTouchControls", &bShowTouchControls, true);
@@ -220,6 +220,7 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename)
 	debugConfig->Get("FontWidth", &iFontWidth, 8);
 	debugConfig->Get("FontHeight", &iFontHeight, 12);
 	debugConfig->Get("DisplayStatusBar", &bDisplayStatusBar, true);
+	debugConfig->Get("ShowDeveloperMenu", &bShowDeveloperMenu, false);
 
 	IniFile::Section *gleshacks = iniFile.GetOrCreateSection("GLESHacks");
 	gleshacks->Get("PrescaleUV", &bPrescaleUV, false);
@@ -364,6 +365,8 @@ void Config::Save() {
 		debugConfig->Set("FontWidth", iFontWidth);
 		debugConfig->Set("FontHeight", iFontHeight);
 		debugConfig->Set("DisplayStatusBar", bDisplayStatusBar);
+		debugConfig->Set("ShowDeveloperMenu", bShowDeveloperMenu);
+
 		if (!iniFile.Save(iniFilename_.c_str())) {
 			ERROR_LOG(LOADER, "Error saving config - can't write ini %s", iniFilename_.c_str());
 			return;

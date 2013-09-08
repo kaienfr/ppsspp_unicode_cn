@@ -25,11 +25,12 @@
 class GameSettingsScreen : public UIDialogScreenWithBackground {
 public:
 	GameSettingsScreen(std::string gamePath, std::string gameID = "")
-		: gamePath_(gamePath), gameID_(gameID), iAlternateSpeedPercent_(3), enableReports_(false), clearrecentlist_(false) {}
+		: gamePath_(gamePath), gameID_(gameID), iAlternateSpeedPercent_(3), enableReports_(false) {}
 
 	virtual void update(InputState &input);
 
 	UI::Event OnLanguageChanged;
+	UI::Event OnRecentChanged;
 
 protected:
 	virtual void CreateViews();
@@ -64,7 +65,6 @@ private:
 	bool cap60FPS_;
 	int iAlternateSpeedPercent_;
 	bool enableReports_;
-	bool clearrecentlist_;
 };
 
 /*
@@ -96,6 +96,7 @@ private:
 	UI::EventReturn OnLoadLanguageIni(UI::EventParams &e);
 	UI::EventReturn OnSaveLanguageIni(UI::EventParams &e);
 	UI::EventReturn OnRestoreDefaultSettings(UI::EventParams &e);
+	UI::EventReturn OnLogConfig(UI::EventParams &e);
 
 	// Temporary variable.
 	bool enableLogging_;
