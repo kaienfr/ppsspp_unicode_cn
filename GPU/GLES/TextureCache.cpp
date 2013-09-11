@@ -199,7 +199,7 @@ inline void TextureCache::AttachFramebuffer(TexCacheEntry *entry, u32 address, V
 			if (entry->format != framebuffer->format) {
 				WARN_LOG_REPORT_ONCE(diffFormat1, G3D, "Render to texture with different formats %d != %d", entry->format, framebuffer->format);
 				// If it already has one, let's hope that one is correct.
-				// Affected game list : Kurohyou 2, Evangelion Jo
+				// If "AttachFramebufferValid" , Evangelion Jo and Kurohyou 2 will be 'blue background' in-game
 				AttachFramebufferInvalid(entry, framebuffer);
 			} else {
 				AttachFramebufferValid(entry, framebuffer);
@@ -217,12 +217,13 @@ inline void TextureCache::AttachFramebuffer(TexCacheEntry *entry, u32 address, V
 			if (framebuffer->format != entry->format) {
 				WARN_LOG_REPORT_ONCE(diffFormat2, G3D, "Render to texture with different formats %d != %d at %08x", entry->format, framebuffer->format, address);
 				// TODO: Use an FBO to translate the palette?
-				// Affected game List : DBZ VS Tag , 3rd birthday 
+				// If 'AttachFramebufferInvalid' , Kurohyou 2 will be missing battle scene in-game and FF Type-0 will have black box shadow/'blue fog' and 3rd birthday will have 'blue fog'
+				// If 'AttachFramebufferValid' , DBZ VS Tag will have 'burning effect' , 
 				AttachFramebufferValid(entry, framebuffer);
 			} else if ((entry->addr - address) / entry->bufw < framebuffer->height) {
 				WARN_LOG_REPORT_ONCE(subarea, G3D, "Render to area containing texture at %08x", address);
 				// TODO: Keep track of the y offset.
-				// Affected game List : God of War Ghost of Sparta , God of War Chains of Olympus
+				// If "AttachFramebufferValid" ,  God of War Ghost of Sparta/Chains of Olympus will be missing special effect.
 				AttachFramebufferInvalid(entry, framebuffer);
 			}
 		}
@@ -1065,7 +1066,7 @@ void TextureCache::SetTexture() {
 	if (iter != cache.end()) {
 		entry = &iter->second;
 		// Validate the texture still matches the cache entry.
-		int dim = gstate.texsize[0] & 0xF0F;
+		u16 dim = gstate.getTextureDimension(0);
 		bool match = entry->Matches(dim, format, maxLevel);
 
 		// Check for FBO - slow!
@@ -1160,7 +1161,7 @@ void TextureCache::SetTexture() {
 			gpuStats.numTextureInvalidations++;
 			DEBUG_LOG(G3D, "Texture different or overwritten, reloading at %08x", texaddr);
 			if (doDelete) {
-				if (entry->maxLevel == maxLevel && entry->dim == (gstate.texsize[0] & 0xF0F) && entry->format == format && g_Config.iTexScalingLevel <= 1) {
+				if (entry->maxLevel == maxLevel && entry->dim == gstate.getTextureDimension(0) && entry->format == format && g_Config.iTexScalingLevel <= 1) {
 					// Actually, if size and number of levels match, let's try to avoid deleting and recreating.
 					// Instead, let's use glTexSubImage to replace the images.
 					replaceImages = true;
@@ -1197,7 +1198,7 @@ void TextureCache::SetTexture() {
 	entry->maxLevel = maxLevel;
 	entry->lodBias = 0.0f;
 	
-	entry->dim = gstate.texsize[0] & 0xF0F;
+	entry->dim = gstate.getTextureDimension(0);
 	entry->bufw = bufw;
 
 	// This would overestimate the size in many case so we underestimate instead
@@ -1225,7 +1226,7 @@ void TextureCache::SetTexture() {
 		const u64 cacheKeyEnd = cacheKeyStart + ((u64)(framebuffer->fb_stride * MAX_SUBAREA_Y_OFFSET) << 32);
 
 		if (cachekey >= cacheKeyStart && cachekey < cacheKeyEnd) {
-			AttachFramebuffer(entry, framebuffer->fb_address, framebuffer, cachekey == cacheKeyStart);
+			AttachFramebuffer(entry, framebuffer->fb_address | 0x04000000, framebuffer, cachekey == cacheKeyStart);
 		}
 	}
 

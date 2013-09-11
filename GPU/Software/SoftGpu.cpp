@@ -151,9 +151,9 @@ SoftGPU::~SoftGPU()
 }
 
 // Copies RGBA8 data from RAM to the currently bound render target.
-void CopyToCurrentFboFromRam(u8* data, int srcwidth, int srcheight, int dstwidth, int dstheight)
+void SoftGPU::CopyToCurrentFboFromRam(u8* data, int srcwidth, int srcheight, int dstwidth, int dstheight)
 {
-    glDisable(GL_BLEND);
+  glDisable(GL_BLEND);
 	glViewport(0, 0, dstwidth, dstheight);
 	glScissor(0, 0, dstwidth, dstheight);
 
@@ -167,10 +167,10 @@ void CopyToCurrentFboFromRam(u8* data, int srcwidth, int srcheight, int dstwidth
 		// TODO: This should probably be converted in a shader instead..
 		// TODO: Do something less brain damaged to manage this buffer...
 		u32 *buf = new u32[srcwidth * srcheight];
-		u16 *fb16 = (u16 *)fb;
+		const u16 *fb16 = (const u16 *)fb;
 		for (int y = 0; y < srcheight; ++y) {
 			u32 *buf_line = &buf[y * srcwidth];
-			u16 *fb_line = &fb16[y * gstate.FrameBufStride()];
+			const u16 *fb_line = &fb16[y * gstate.FrameBufStride()];
 
 			switch (gstate.FrameBufFormat()) {
 			case GE_FORMAT_565:
@@ -240,7 +240,7 @@ void SoftGPU::CopyDisplayToOutput()
 void SoftGPU::CopyDisplayToOutputInternal()
 {
 	// The display always shows 480x272.
-	CopyToCurrentFboFromRam(fb, FB_WIDTH, FB_HEIGHT, PSP_CoreParameter().renderWidth, PSP_CoreParameter().renderHeight);
+	CopyToCurrentFboFromRam(fb, FB_WIDTH, FB_HEIGHT, PSP_CoreParameter().pixelWidth, PSP_CoreParameter().pixelHeight);
 }
 
 void SoftGPU::ProcessEvent(GPUEvent ev) {

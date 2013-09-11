@@ -76,20 +76,22 @@ void EmuScreen::bootGame(const std::string &filename) {
 	coreParam.enableDebugging = false;
 	coreParam.printfEmuLog = false;
 	coreParam.headLess = false;
-#ifndef _WIN32
-	if (g_Config.iWindowZoom < 1 || g_Config.iWindowZoom > 2)
-		g_Config.iWindowZoom = 1;
-#endif
-	coreParam.renderWidth = 480 * g_Config.iWindowZoom;
-	coreParam.renderHeight = 272 * g_Config.iWindowZoom;
+
+	if (g_Config.iInternalResolution == 0) {
+		coreParam.renderWidth = dp_xres;
+		coreParam.renderHeight = dp_yres;
+	} else {
+		if (g_Config.iInternalResolution < 0)
+			g_Config.iInternalResolution = 1;
+		coreParam.renderWidth = 480 * g_Config.iInternalResolution;
+		coreParam.renderHeight = 272 * g_Config.iInternalResolution;
+	}
+
 	coreParam.outputWidth = dp_xres;
 	coreParam.outputHeight = dp_yres;
 	coreParam.pixelWidth = pixel_xres;
 	coreParam.pixelHeight = pixel_yres;
-	if (g_Config.bAntiAliasing) {
-		coreParam.renderWidth *= 2;
-		coreParam.renderHeight *= 2;
-	}
+
 	std::string error_string;
 	if (PSP_Init(coreParam, &error_string)) {
 		invalid_ = false;
@@ -330,6 +332,8 @@ void EmuScreen::axis(const AxisInput &axis) {
 
 void EmuScreen::processAxis(const AxisInput &axis, int direction) {
 	int result = KeyMap::AxisToPspButton(axis.deviceId, axis.axisId, direction);
+	int resultOpposite = KeyMap::AxisToPspButton(axis.deviceId, axis.axisId, -direction);
+
 	if (result == KEYMAP_ERROR_UNKNOWN_KEY)
 		return;
 
@@ -369,7 +373,9 @@ void EmuScreen::processAxis(const AxisInput &axis, int direction) {
 			if (result != KEYMAP_ERROR_UNKNOWN_KEY)
 				pspKey(result, KEY_UP);
 		} else {
+			// Release both directions, trying to deal with some erratic controllers that can cause it to stick.
 			pspKey(result, KEY_UP);
+			pspKey(resultOpposite, KEY_UP);
 		}
 	}
 }
@@ -441,9 +447,10 @@ void EmuScreen::update(InputState &input) {
 	__CtrlSetRapidFire(virtKeys[VIRTKEY_RAPID_FIRE - VIRTKEY_FIRST]);
 
 	// Apply tilt to left stick
+	// TODO: Make into an axis
 	if (g_Config.bAccelerometerToAnalogHoriz) {
 		// TODO: Deadzone, etc.
-		leftstick_x += clamp1(curve1(input.acc.y) * 2.0f);
+		leftstick_x += clamp1(curve1(input.acc.y) * 2.0f) * g_Config.iTiltSensitivity / 100;
 		__CtrlSetAnalogX(clamp1(leftstick_x), CTRL_STICK_LEFT);
 	}
 

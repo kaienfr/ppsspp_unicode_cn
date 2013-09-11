@@ -49,7 +49,7 @@ std::vector<std::string> CwCheatScreen::CreateCodeList() {
 		if (cheatList[i].substr(0, 3) == "_C1") {
 			formattedList.push_back(cheatList[i].substr(4));
 			enableCheat[j++] = true;
-			locations.push_back(i);
+			locations.push_back((int)i);
 		}
 		if (cheatList[i].substr(0, 3) == "_C0") {
 			formattedList.push_back(cheatList[i].substr(4));
@@ -198,7 +198,8 @@ UI::EventReturn CwCheatScreen::OnImportCheat(UI::EventParams &params)
 	getline(is, title2);
 	is.close();
 	os.open(activeCheatFile.c_str(), std::ios::app);
-	if (title2.substr(0, 2) != "_S") {
+	auto it = title.begin();
+	if (title2.substr(0, 2) != "_S" && it != title.end() && (++it) != title.end()) {
 		os << title[0] << "\n" << title[1];
 	}
 	if (newList.size() != 0)
