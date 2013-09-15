@@ -1776,6 +1776,11 @@ void Jit::Comp_VRot(MIPSOpcode op) {
 	// DISABLE;
 	CONDITIONAL_DISABLE;
 
+	// Keeping it enabled in x64 non-windows as it seems fine there.
+#if defined(_M_IX86) && !defined(_WIN32)
+	DISABLE;
+#endif
+
 	int vd = _VD;
 	int vs = _VS;
 

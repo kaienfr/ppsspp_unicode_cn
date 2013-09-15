@@ -89,9 +89,53 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 	bool hideLog = false;
 #endif
 
+	VFSRegister("", new DirectoryAssetReader("assets/"));
+	VFSRegister("", new DirectoryAssetReader(""));
+
+	wchar_t lcCountry[256];
+
+	// LOCALE_SNAME is only available in WinVista+
+	// Really should find a way to do this in XP too :/
+	if (0 != GetLocaleInfo(LOCALE_NAME_USER_DEFAULT, LOCALE_SNAME, lcCountry, 256)) {
+		langRegion = ConvertWStringToUTF8(lcCountry);
+		for (int i = 0; i < langRegion.size(); i++) {
+			if (langRegion[i] == '-')
+				langRegion[i] = '_';
+		}
+	} else {
+		langRegion = "en_US";
+	}
+
+	std::string configFilename;
+	const char *configOption = "--config=";
+
+	std::string controlsConfigFilename;
+	const char *controlsOption = "--controlconfig=";
+
+	for (int i = 1; i < __argc; ++i)
+	{
+		if (__argv[i][0] == '\0')
+			continue;
+		if (__argv[i][0] == '-')
+		{
+			if (!strncmp(__argv[i], configOption, strlen(configOption)) && strlen(__argv[i]) > strlen(configOption)) {
+				configFilename = __argv[i] + strlen(configOption);
+			}
+			if (!strncmp(__argv[i], controlsOption, strlen(controlsOption)) && strlen(__argv[i]) > strlen(controlsOption)) {
+				controlsConfigFilename = __argv[i] + strlen(controlsOption);
+			}
+		}
+	}
+
+	if(configFilename.empty())
+		configFilename = "ppsspp.ini";
+
+	if(controlsConfigFilename.empty())
+		controlsConfigFilename = "controls.ini";
+
 	// Load config up here, because those changes below would be overwritten
 	// if it's not loaded here first.
-	g_Config.Load();
+	g_Config.Load(configFilename.c_str(), controlsConfigFilename.c_str());
 
 	// The rest is handled in NativeInit().
 	for (int i = 1; i < __argc; ++i)
@@ -118,23 +162,6 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 			if (!strncmp(__argv[i], "--windowed", strlen("--windowed")))
 				g_Config.bFullScreen = false;
 		}
-	}
-
-	VFSRegister("", new DirectoryAssetReader("assets/"));
-	VFSRegister("", new DirectoryAssetReader(""));
-
-	wchar_t lcCountry[256];
-
-	// LOCALE_SNAME is only available in WinVista+
-	// Really should find a way to do this in XP too :/
-	if (0 != GetLocaleInfo(LOCALE_NAME_USER_DEFAULT, LOCALE_SNAME, lcCountry, 256)) {
-		langRegion = ConvertWStringToUTF8(lcCountry);
-		for (int i = 0; i < langRegion.size(); i++) {
-			if (langRegion[i] == '-')
-				langRegion[i] = '_';
-		}
-	} else {
-		langRegion = "en_US";
 	}
 
 	LogManager::Init();

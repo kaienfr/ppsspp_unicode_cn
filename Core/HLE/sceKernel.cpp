@@ -184,53 +184,76 @@ void __KernelShutdown()
 
 void __KernelDoState(PointerWrap &p)
 {
-	p.Do(kernelRunning);
-	kernelObjects.DoState(p);
-	p.DoMarker("KernelObjects");
+	{
+		auto s = p.Section("Kernel", 1);
+		if (!s)
+			return;
 
-	__InterruptsDoState(p);
-	// Memory needs to be after kernel objects, which may free kernel memory.
-	__KernelMemoryDoState(p);
-	__KernelThreadingDoState(p);
-	__KernelAlarmDoState(p);
-	__KernelVTimerDoState(p);
-	__KernelEventFlagDoState(p);
-	__KernelMbxDoState(p);
-	__KernelModuleDoState(p);
-	__KernelMsgPipeDoState(p);
-	__KernelMutexDoState(p);
-	__KernelSemaDoState(p);
-	__KernelTimeDoState(p);
+		p.Do(kernelRunning);
+		kernelObjects.DoState(p);
+	}
 
-	__AtracDoState(p);
-	__AudioDoState(p);
-	__CccDoState(p);
-	__CtrlDoState(p);
-	__DisplayDoState(p);
-	__FontDoState(p);
-	__GeDoState(p);
-	__ImposeDoState(p);
-	__IoDoState(p);
-	__JpegDoState(p);
-	__MpegDoState(p);
-	__NetDoState(p);
-	__NetAdhocDoState(p);
-	__PowerDoState(p);
-	__PsmfDoState(p);
-	__PsmfPlayerDoState(p);
-	__RtcDoState(p);
-	__SasDoState(p);
-	__SslDoState(p);
-	__UmdDoState(p);
-	__UtilityDoState(p);
-	__UsbDoState(p);
-	__VaudioDoState(p);
-	__HeapDoState(p);
+	{
+		auto s = p.Section("Kernel Modules", 1);
+		if (!s)
+			return;
 
-	__PPGeDoState(p);
+		__InterruptsDoState(p);
+		// Memory needs to be after kernel objects, which may free kernel memory.
+		__KernelMemoryDoState(p);
+		__KernelThreadingDoState(p);
+		__KernelAlarmDoState(p);
+		__KernelVTimerDoState(p);
+		__KernelEventFlagDoState(p);
+		__KernelMbxDoState(p);
+		__KernelModuleDoState(p);
+		__KernelMsgPipeDoState(p);
+		__KernelMutexDoState(p);
+		__KernelSemaDoState(p);
+		__KernelTimeDoState(p);
+	}
 
-	__InterruptsDoStateLate(p);
-	__KernelThreadingDoStateLate(p);
+	{
+		auto s = p.Section("HLE Modules", 1);
+		if (!s)
+			return;
+
+		__AtracDoState(p);
+		__AudioDoState(p);
+		__CccDoState(p);
+		__CtrlDoState(p);
+		__DisplayDoState(p);
+		__FontDoState(p);
+		__GeDoState(p);
+		__ImposeDoState(p);
+		__IoDoState(p);
+		__JpegDoState(p);
+		__MpegDoState(p);
+		__NetDoState(p);
+		__NetAdhocDoState(p);
+		__PowerDoState(p);
+		__PsmfDoState(p);
+		__PsmfPlayerDoState(p);
+		__RtcDoState(p);
+		__SasDoState(p);
+		__SslDoState(p);
+		__UmdDoState(p);
+		__UtilityDoState(p);
+		__UsbDoState(p);
+		__VaudioDoState(p);
+		__HeapDoState(p);
+
+		__PPGeDoState(p);
+	}
+
+	{
+		auto s = p.Section("Kernel Cleanup", 1);
+		if (!s)
+			return;
+
+		__InterruptsDoStateLate(p);
+		__KernelThreadingDoStateLate(p);
+	}
 }
 
 bool __KernelIsRunning() {
@@ -488,6 +511,10 @@ int KernelObjectPool::GetCount()
 
 void KernelObjectPool::DoState(PointerWrap &p)
 {
+	auto s = p.Section("KernelObjectPool", 1);
+	if (!s)
+		return;
+
 	int _maxCount = maxCount;
 	p.Do(_maxCount);
 
@@ -530,7 +557,6 @@ void KernelObjectPool::DoState(PointerWrap &p)
 		}
 		pool[i]->DoState(p);
 	}
-	p.DoMarker("KernelObjectPool");
 }
 
 KernelObject *KernelObjectPool::CreateByIDType(int type)
@@ -706,7 +732,7 @@ const HLEFunction ThreadManForUser[] =
 	{0x1AF94D03,0,"sceKernelDonateWakeupThread"},
 	{0xea748e31,WrapI_UU<sceKernelChangeCurrentThreadAttr>,"sceKernelChangeCurrentThreadAttr"},
 	{0x71bc9871,WrapI_II<sceKernelChangeThreadPriority>,"sceKernelChangeThreadPriority"},
-	{0x446D8DE6,WrapI_CUUIUU<sceKernelCreateThread>,"sceKernelCreateThread"},
+	{0x446D8DE6,WrapI_CUUIUU<sceKernelCreateThread>,           "sceKernelCreateThread",                HLE_NOT_IN_INTERRUPT},
 	{0x9fa03cd3,WrapI_I<sceKernelDeleteThread>,"sceKernelDeleteThread"},
 	{0xBD123D9E,WrapI_U<sceKernelDelaySysClockThread>,         "sceKernelDelaySysClockThread",         HLE_NOT_IN_INTERRUPT | HLE_NOT_DISPATCH_SUSPENDED},
 	{0x1181E963,WrapI_U<sceKernelDelaySysClockThreadCB>,       "sceKernelDelaySysClockThreadCB",       HLE_NOT_IN_INTERRUPT | HLE_NOT_DISPATCH_SUSPENDED},
@@ -727,7 +753,7 @@ const HLEFunction ThreadManForUser[] =
 	{0x912354a7,&WrapI_I<sceKernelRotateThreadReadyQueue>,"sceKernelRotateThreadReadyQueue"},
 	{0x9ACE131E,WrapI_V<sceKernelSleepThread>,                 "sceKernelSleepThread",                 HLE_NOT_IN_INTERRUPT | HLE_NOT_DISPATCH_SUSPENDED},
 	{0x82826f70,WrapI_V<sceKernelSleepThreadCB>,               "sceKernelSleepThreadCB",               HLE_NOT_IN_INTERRUPT | HLE_NOT_DISPATCH_SUSPENDED},
-	{0xF475845D,&WrapI_IIU<sceKernelStartThread>,"sceKernelStartThread"},
+	{0xF475845D,&WrapI_IIU<sceKernelStartThread>,              "sceKernelStartThread",                 HLE_NOT_IN_INTERRUPT},
 	{0x9944f31f,WrapI_I<sceKernelSuspendThread>,"sceKernelSuspendThread"},
 	{0x616403ba,WrapI_I<sceKernelTerminateThread>,"sceKernelTerminateThread"},
 	{0x383f7bcc,WrapI_I<sceKernelTerminateDeleteThread>,"sceKernelTerminateDeleteThread"},

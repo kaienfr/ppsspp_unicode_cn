@@ -159,7 +159,7 @@ void TransformDrawEngine::ApplyDrawState(int prim) {
 
 		int blendFuncA  = gstate.getBlendFuncA();
 		int blendFuncB  = gstate.getBlendFuncB();
-		int blendFuncEq = gstate.getBlendEq();
+		GEBlendMode blendFuncEq = gstate.getBlendEq();
 		if (blendFuncA > GE_SRCBLEND_FIXA) blendFuncA = GE_SRCBLEND_FIXA;
 		if (blendFuncB > GE_DSTBLEND_FIXB) blendFuncB = GE_DSTBLEND_FIXB;
 
@@ -217,14 +217,19 @@ void TransformDrawEngine::ApplyDrawState(int prim) {
 		}
 
 		// At this point, through all paths above, glBlendFuncA and glBlendFuncB will be set right somehow.
-		if (!gstate.isStencilTestEnabled()) {
+		if (!gstate.isStencilTestEnabled() && !gstate.isDepthTestEnabled()) {
 			// Fixes some Persona 2 issues, may be correct? (that is, don't change dest alpha at all if blending)
 			// If this doesn't break anything else, it's likely to be right.
 			// I guess an alternative solution would be to simply disable alpha writes if alpha blending is enabled.
-			glstate.blendFuncSeparate.set(glBlendFuncA, glBlendFuncB, GL_ZERO, glBlendFuncB);
+			glstate.blendFuncSeparate.set(glBlendFuncA, glBlendFuncB, GL_ZERO, GL_ZERO);
 		} else {
 			glstate.blendFuncSeparate.set(glBlendFuncA, glBlendFuncB, glBlendFuncA, glBlendFuncB);
 		}
+#if !defined(USING_GLES2)
+		if (blendFuncEq == GE_BLENDMODE_ABSDIFF) {
+			WARN_LOG_REPORT_ONCE(blendAbsdiff, G3D, "Unsupported absdiff blend mode");
+		}
+#endif
 		glstate.blendEquation.set(eqLookup[blendFuncEq]);
 	}
 
@@ -366,8 +371,8 @@ void TransformDrawEngine::ApplyDrawState(int prim) {
 	int regionX2 = gstate_c.curRTWidth;
 	int regionY2 = gstate_c.curRTHeight;
 
-	float offsetX = (float)(gstate.offsetx & 0xFFFF) / 16.0f;
-	float offsetY = (float)(gstate.offsety & 0xFFFF) / 16.0f;
+	float offsetX = gstate.getOffsetX();
+	float offsetY = gstate.getOffsetY();
 
 	if (throughmode) {
 		// No viewport transform here. Let's experiment with using region.

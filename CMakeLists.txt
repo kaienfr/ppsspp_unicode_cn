@@ -763,6 +763,8 @@ add_library(${CoreLibName} ${CoreLinkType}
 	Core/Debugger/SymbolMap.h
 	Core/Dialog/PSPDialog.cpp
 	Core/Dialog/PSPDialog.h
+	Core/Dialog/PSPGamedataInstallDialog.cpp
+	Core/Dialog/PSPGamedataInstallDialog.h
 	Core/Dialog/PSPMsgDialog.cpp
 	Core/Dialog/PSPMsgDialog.h
 	Core/Dialog/PSPOskDialog.cpp
@@ -996,14 +998,16 @@ set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/git-version.cpp
 add_dependencies(${CoreLibName} GitVersion)
 
 add_library(GPU OBJECT
+	GPU/Common/VertexDecoderCommon.cpp
+	GPU/Common/VertexDecoderCommon.h
+	GPU/Common/IndexGenerator.cpp
+	GPU/Common/IndexGenerator.h
 	GPU/GLES/GLES_GPU.cpp
 	GPU/GLES/GLES_GPU.h
 	GPU/GLES/FragmentShaderGenerator.cpp
 	GPU/GLES/FragmentShaderGenerator.h
 	GPU/GLES/Framebuffer.cpp
 	GPU/GLES/Framebuffer.h
-	GPU/GLES/IndexGenerator.cpp
-	GPU/GLES/IndexGenerator.h
 	GPU/GLES/ShaderManager.cpp
 	GPU/GLES/ShaderManager.h
 	GPU/GLES/Spline.cpp

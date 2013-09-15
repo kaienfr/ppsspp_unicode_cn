@@ -42,7 +42,6 @@
 #endif
 
 #include "Common.h"
-#include "Core/Config.h"
 #include "FileUtil.h"
 #include "../ext/snappy/snappy-c.h"
 
@@ -68,6 +67,32 @@ template <class T>
 struct LinkedListItem : public T
 {
 	LinkedListItem<T> *next;
+};
+
+class PointerWrap;
+
+class PointerWrapSection
+{
+public:
+	PointerWrapSection(PointerWrap &p, int ver, const char *title) : p_(p), ver_(ver), title_(title) {
+	}
+	~PointerWrapSection();
+	
+	bool operator == (const int &v) const { return ver_ == v; }
+	bool operator != (const int &v) const { return ver_ != v; }
+	bool operator <= (const int &v) const { return ver_ <= v; }
+	bool operator >= (const int &v) const { return ver_ >= v; }
+	bool operator <  (const int &v) const { return ver_ < v; }
+	bool operator >  (const int &v) const { return ver_ > v; }
+
+	operator bool() const  {
+		return ver_ > 0;
+	}
+
+private:
+	PointerWrap &p_;
+	int ver_;
+	const char *title_;
 };
 
 // Wrapper class
@@ -130,6 +155,38 @@ public:
 	PointerWrap(u8 **ptr_, Mode mode_) : ptr(ptr_), mode(mode_), error(ERROR_NONE) {}
 	PointerWrap(unsigned char **ptr_, int mode_) : ptr((u8**)ptr_), mode((Mode)mode_), error(ERROR_NONE) {}
 
+	PointerWrapSection Section(const char *title, int ver) {
+		return Section(title, ver, ver);
+	}
+
+	// The returned object can be compared against the version that was loaded.
+	// This can be used to support versions as old as minVer.
+	// Version = 0 means the section was not found.
+	PointerWrapSection Section(const char *title, int minVer, int ver) {
+		char marker[16] = {0};
+		int foundVersion = ver;
+
+		strncpy(marker, title, sizeof(marker));
+		if (!ExpectVoid(marker, sizeof(marker)))
+		{
+			// Might be before we added name markers for safety.
+			if (foundVersion == 1 && ExpectVoid(&foundVersion, sizeof(foundVersion)))
+				DoMarker(title);
+			// Wasn't found, but maybe we can still load the state.
+			else
+				foundVersion = 0;
+		}
+		else
+			Do(foundVersion);
+
+		if (error == ERROR_FAILURE || foundVersion < minVer || foundVersion > ver) {
+			WARN_LOG(COMMON, "Savestate failure: wrong version %d found for %s", foundVersion, title);
+			SetError(ERROR_FAILURE);
+			return PointerWrapSection(*this, -1, title);
+		}
+		return PointerWrapSection(*this, foundVersion, title);
+	}
+
 	void SetMode(Mode mode_) {mode = mode_;}
 	Mode GetMode() const {return mode;}
 	u8 **GetPPtr() {return ptr;}
@@ -139,6 +196,19 @@ public:
 			error = error_;
 		if (error > ERROR_WARNING)
 			mode = PointerWrap::MODE_MEASURE;
+	}
+
+	bool ExpectVoid(void *data, int size)
+	{
+		switch (mode) {
+		case MODE_READ:	if (memcmp(data, *ptr, size) != 0) return false; break;
+		case MODE_WRITE: memcpy(*ptr, data, size); break;
+		case MODE_MEASURE: break;  // MODE_MEASURE - don't need to do anything
+		case MODE_VERIFY: for(int i = 0; i < size; i++) _dbg_assert_msg_(COMMON, ((u8*)data)[i] == (*ptr)[i], "Savestate verification failure: %d (0x%X) (at %p) != %d (0x%X) (at %p).\n", ((u8*)data)[i], ((u8*)data)[i], &((u8*)data)[i], (*ptr)[i], (*ptr)[i], &(*ptr)[i]); break;
+		default: break;  // throw an error?
+		}
+		(*ptr) += size;
+		return true;
 	}
 
 	void DoVoid(void *data, int size)
@@ -577,13 +647,25 @@ public:
 	}
 };
 
+inline PointerWrapSection::~PointerWrapSection() {
+	if (ver_ > 0) {
+		p_.DoMarker(title_);
+	}
+}
+
 
 class CChunkFileReader
 {
 public:
+	enum Error {
+		ERROR_NONE,
+		ERROR_BAD_FILE,
+		ERROR_BROKEN_STATE,
+	};
+
 	// Load file template
 	template<class T>
-	static bool Load(const std::string& _rFilename, int _Revision, T& _class, std::string* _failureReason) 
+	static Error Load(const std::string& _rFilename, int _Revision, const char *_VersionString, T& _class, std::string* _failureReason) 
 	{
 		INFO_LOG(COMMON, "ChunkReader: Loading %s" , _rFilename.c_str());
 		_failureReason->clear();
@@ -593,7 +675,7 @@ public:
 			_failureReason->clear();
 			_failureReason->append("LoadStateDoesntExist");
 			ERROR_LOG(COMMON, "ChunkReader: File doesn't exist");
-			return false;
+			return ERROR_BAD_FILE;
 		}
 				
 		// Check file size
@@ -602,14 +684,14 @@ public:
 		if (fileSize < headerSize)
 		{
 			ERROR_LOG(COMMON,"ChunkReader: File too small");
-			return false;
+			return ERROR_BAD_FILE;
 		}
 
 		File::IOFile pFile(_rFilename, "rb");
 		if (!pFile)
 		{
 			ERROR_LOG(COMMON,"ChunkReader: Can't open file for reading");
-			return false;
+			return ERROR_BAD_FILE;
 		}
 
 		// read the header
@@ -617,7 +699,7 @@ public:
 		if (!pFile.ReadArray(&header, 1))
 		{
 			ERROR_LOG(COMMON,"ChunkReader: Bad header size");
-			return false;
+			return ERROR_BAD_FILE;
 		}
 		
 		// Check revision
@@ -625,10 +707,10 @@ public:
 		{
 			ERROR_LOG(COMMON,"ChunkReader: Wrong file revision, got %d expected %d",
 				header.Revision, _Revision);
-			return false;
+			return ERROR_BAD_FILE;
 		}
 		
-		if (strcmp(header.GitVersion, PPSSPP_GIT_VERSION) != 0)
+		if (strcmp(header.GitVersion, _VersionString) != 0)
 		{
 			WARN_LOG(COMMON, "This savestate was generated by a different version of PPSSPP, %s. It may not load properly.",
 				header.GitVersion);
@@ -640,7 +722,7 @@ public:
 		{
 			ERROR_LOG(COMMON,"ChunkReader: Bad file size, got %d expected %d",
 				sz, header.ExpectedSize);
-			return false;
+			return ERROR_BAD_FILE;
 		}
 		
 		// read the state
@@ -648,7 +730,7 @@ public:
 		if (!pFile.ReadBytes(buffer, sz))
 		{
 			ERROR_LOG(COMMON,"ChunkReader: Error reading file");
-			return false;
+			return ERROR_BAD_FILE;
 		}
 
 		u8 *ptr = buffer;
@@ -670,12 +752,16 @@ public:
 		delete[] buf;
 		
 		INFO_LOG(COMMON, "ChunkReader: Done loading %s" , _rFilename.c_str());
-		return p.error != p.ERROR_FAILURE;
+		if (p.error != p.ERROR_FAILURE) {
+			return ERROR_NONE;
+		} else {
+			return ERROR_BROKEN_STATE;
+		}
 	}
 	
 	// Save file template
 	template<class T>
-	static bool Save(const std::string& _rFilename, int _Revision, T& _class)
+	static Error Save(const std::string& _rFilename, int _Revision, const char *_VersionString, T& _class)
 	{
 		INFO_LOG(COMMON, "ChunkReader: Writing %s" , _rFilename.c_str());
 
@@ -683,7 +769,7 @@ public:
 		if (!pFile)
 		{
 			ERROR_LOG(COMMON,"ChunkReader: Error opening file for write");
-			return false;
+			return ERROR_BAD_FILE;
 		}
 
 		bool compress = true;
@@ -705,7 +791,8 @@ public:
 		header.Revision = _Revision;
 		header.ExpectedSize = (int)sz;
 		header.UncompressedSize = (int)sz;
-		strncpy(header.GitVersion, PPSSPP_GIT_VERSION, 32);
+		strncpy(header.GitVersion, _VersionString, 32);
+		header.GitVersion[31] = '\0';
 
 		// Write to file
 		if (compress) {
@@ -717,11 +804,11 @@ public:
 			if (!pFile.WriteArray(&header, 1))
 			{
 				ERROR_LOG(COMMON,"ChunkReader: Failed writing header");
-				return false;
+				return ERROR_BAD_FILE;
 			}
 			if (!pFile.WriteBytes(&compressed_buffer[0], comp_len)) {
 				ERROR_LOG(COMMON,"ChunkReader: Failed writing compressed data");
-				return false;
+				return ERROR_BAD_FILE;
 			}	else {
 				INFO_LOG(COMMON, "Savestate: Compressed %i bytes into %i", (int)sz, (int)comp_len);
 			}
@@ -730,23 +817,27 @@ public:
 			if (!pFile.WriteArray(&header, 1))
 			{
 				ERROR_LOG(COMMON,"ChunkReader: Failed writing header");
-				return false;
+				return ERROR_BAD_FILE;
 			}
 			if (!pFile.WriteBytes(&buffer[0], sz))
 			{
 				ERROR_LOG(COMMON,"ChunkReader: Failed writing data");
-				return false;
+				return ERROR_BAD_FILE;
 			}
 			delete [] buffer;
 		}
 		
 		INFO_LOG(COMMON,"ChunkReader: Done writing %s", 
 				 _rFilename.c_str());
-		return p.error != p.ERROR_FAILURE;
+		if (p.error != p.ERROR_FAILURE) {
+			return ERROR_NONE;
+		} else {
+			return ERROR_BROKEN_STATE;
+		}
 	}
 	
 	template <class T>
-	static bool Verify(T& _class)
+	static Error Verify(T& _class)
 	{
 		u8 *ptr = 0;
 
@@ -766,7 +857,7 @@ public:
 		p.SetMode(PointerWrap::MODE_VERIFY);
 		_class.DoState(p);
 
-		return true;
+		return ERROR_NONE;
 	}
 
 private:

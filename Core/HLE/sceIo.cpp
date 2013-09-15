@@ -176,6 +176,10 @@ public:
 	int GetIDType() const { return PPSSPP_KERNEL_TMID_File; }
 
 	virtual void DoState(PointerWrap &p) {
+		auto s = p.Section("FileNode", 1);
+		if (!s)
+			return;
+
 		p.Do(fullpath);
 		p.Do(handle);
 		p.Do(callbackID);
@@ -204,8 +208,6 @@ public:
 
 		p.Do(waitingThreads);
 		p.Do(pausedWaits);
-
-		p.DoMarker("File");
 	}
 
 	std::string fullpath;
@@ -277,7 +279,7 @@ void __IoFreeFd(int fd, u32 &error) {
 		if (f) {
 			// Wake anyone waiting on the file before closing it.
 			for (size_t i = 0; i < f->waitingThreads.size(); ++i) {
-				HLEKernel::ResumeFromWait(f->waitingThreads[i], WAITTYPE_ASYNCIO, f->GetUID(), SCE_KERNEL_ERROR_WAIT_DELETE);
+				HLEKernel::ResumeFromWait(f->waitingThreads[i], WAITTYPE_ASYNCIO, f->GetUID(), (int)SCE_KERNEL_ERROR_WAIT_DELETE);
 			}
 		}
 		error = kernelObjects.Destroy<FileNode>(fds[fd]);
@@ -463,6 +465,10 @@ void __IoInit() {
 }
 
 void __IoDoState(PointerWrap &p) {
+	auto s = p.Section("sceIo", 1);
+	if (!s)
+		return;
+
 	ioManager.DoState(p);
 	p.DoArray(fds, ARRAY_SIZE(fds));
 	p.Do(asyncNotifyEvent);
@@ -471,7 +477,6 @@ void __IoDoState(PointerWrap &p) {
 	CoreTiming::RestoreRegisterEvent(syncNotifyEvent, "IoSyncNotify", __IoSyncNotify);
 	p.Do(memStickCallbacks);
 	p.Do(memStickFatCallbacks);
-	p.DoMarker("sceIo");
 }
 
 void __IoShutdown() {
@@ -1753,6 +1758,10 @@ public:
 	int GetIDType() const { return PPSSPP_KERNEL_TMID_DirList; }
 
 	virtual void DoState(PointerWrap &p) {
+		auto s = p.Section("DirListing", 1);
+		if (!s)
+			return;
+
 		p.Do(name);
 		p.Do(index);
 
@@ -1763,7 +1772,6 @@ public:
 		for (int i = 0; i < count; ++i) {
 			listing[i].DoState(p);
 		}
-		p.DoMarker("DirListing");
 	}
 
 	std::string name;

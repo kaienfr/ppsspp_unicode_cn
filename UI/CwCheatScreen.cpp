@@ -23,6 +23,7 @@
 #include "i18n/i18n.h"
 
 #include "Core/Core.h"
+#include "Core/Config.h"
 
 #include "UI/OnScreenDisplay.h"
 #include "UI/ui_atlas.h"
@@ -90,6 +91,12 @@ void CwCheatScreen::CreateViews() {
 	for (size_t i = 0; i < formattedList.size(); i++) {
 		name = formattedList[i].c_str();
 		rightColumn->Add(new CheatCheckBox(&enableCheat[i], k->T(name), "" ))->OnClick.Handle(this, &CwCheatScreen::OnCheckBox);
+	}
+}
+
+void CwCheatScreen::sendMessage(const char *message, const char *value) {
+	if (!strcmp(message, "language")) {
+		screenManager()->RecreateAllViews();
 	}
 }
 

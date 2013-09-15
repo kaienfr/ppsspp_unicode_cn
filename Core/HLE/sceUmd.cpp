@@ -60,6 +60,10 @@ void __UmdInit()
 
 void __UmdDoState(PointerWrap &p)
 {
+	auto s = p.Section("sceUmd", 1);
+	if (!s)
+		return;
+
 	p.Do(umdActivated);
 	p.Do(umdStatus);
 	p.Do(umdErrorStat);
@@ -70,7 +74,6 @@ void __UmdDoState(PointerWrap &p)
 	CoreTiming::RestoreRegisterEvent(umdStatChangeEvent, "UmdChange", __UmdStatChange);
 	p.Do(umdWaitingThreads);
 	p.Do(umdPausedWaits);
-	p.DoMarker("sceUmd");
 }
 
 u8 __KernelUmdGetState()
@@ -420,7 +423,7 @@ u32 sceUmdCancelWaitDriveStat()
 	for (size_t i = 0; i < umdWaitingThreads.size(); ++i) {
 		const SceUID threadID = umdWaitingThreads[i];
 		CoreTiming::UnscheduleEvent(umdStatTimeoutEvent, threadID);
-		HLEKernel::ResumeFromWait(threadID, WAITTYPE_UMD, 1, SCE_KERNEL_ERROR_WAIT_CANCEL);
+		HLEKernel::ResumeFromWait(threadID, WAITTYPE_UMD, 1, (int)SCE_KERNEL_ERROR_WAIT_CANCEL);
 	}
 	umdWaitingThreads.clear();
 

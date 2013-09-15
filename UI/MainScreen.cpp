@@ -556,19 +556,21 @@ void MainScreen::sendMessage(const char *message, const char *value) {
 		screenManager()->switchScreen(new EmuScreen(value));
 	}
 	if (!strcmp(message, "language")) {
-		RecreateViews();
+		screenManager()->RecreateAllViews();
 	}
 	if (!strcmp(message, "control mapping")) {
+		UpdateUIState(UISTATE_MENU);
 		screenManager()->push(new ControlMappingScreen());
 	}
 	if (!strcmp(message, "settings")) {
+		UpdateUIState(UISTATE_MENU);
 		screenManager()->push(new GameSettingsScreen(""));
 	}
 }
 
 void MainScreen::update(InputState &input) {
 	UIScreen::update(input);
-	globalUIState = UISTATE_MENU;
+	UpdateUIState(UISTATE_MENU);
 }
 
 UI::EventReturn MainScreen::OnLoadFile(UI::EventParams &e) {
@@ -587,13 +589,23 @@ UI::EventReturn MainScreen::OnLoadFile(UI::EventParams &e) {
 }
 
 UI::EventReturn MainScreen::OnGameSelected(UI::EventParams &e) {
-	screenManager()->push(new GameScreen(e.s));
+	#ifdef _WIN32
+	std::string path = ReplaceAll(e.s, "//", "/");
+#else
+	std::string path = e.s;
+#endif
+	screenManager()->push(new GameScreen(path));
 	return UI::EVENT_DONE;
 }
 
 UI::EventReturn MainScreen::OnGameSelectedInstant(UI::EventParams &e) {
+	#ifdef _WIN32
+	std::string path = ReplaceAll(e.s, "//", "/");
+#else
+	std::string path = e.s;
+#endif
 	// Go directly into the game.
-	screenManager()->switchScreen(new EmuScreen(e.s));
+	screenManager()->switchScreen(new EmuScreen(path));
 	return UI::EVENT_DONE;
 }
 
@@ -653,7 +665,7 @@ UI::EventReturn MainScreen::OnExit(UI::EventParams &e) {
 }
 
 void GamePauseScreen::update(InputState &input) {
-	globalUIState = UISTATE_PAUSEMENU;
+	UpdateUIState(UISTATE_PAUSEMENU);
 	UIScreen::update(input);
 }
 
@@ -679,8 +691,10 @@ void GamePauseScreen::DrawBackground(UIContext &dc) {
 }
 
 GamePauseScreen::~GamePauseScreen() {
-	g_Config.iCurrentStateSlot = saveSlots_->GetSelection();
-	g_Config.Save();
+	if (saveSlots_ != NULL) {
+		g_Config.iCurrentStateSlot = saveSlots_->GetSelection();
+		g_Config.Save();
+	}
 }
 
 void GamePauseScreen::CreateViews() {
@@ -774,6 +788,6 @@ UI::EventReturn GamePauseScreen::OnCwCheat(UI::EventParams &e) {
 
 void GamePauseScreen::sendMessage(const char *message, const char *value) {
 	if (!strcmp(message, "language")) {
-		RecreateViews();
+		screenManager()->RecreateAllViews();
 	}
 }
