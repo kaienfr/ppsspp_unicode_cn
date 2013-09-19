@@ -15,17 +15,37 @@
 // Official git repository and contact information can be found at
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
-#include <string>
+#pragma once
 
-#include "Globals.h"
+#include "StubHost.h"
 
-extern bool teamCityMode;
-extern std::string teamCityName;
-void TeamCityPrint(const char *fmt, ...);
+#undef HEADLESSHOST_CLASS
+#define HEADLESSHOST_CLASS WindowsHeadlessHost
 
-std::string ExpectedFromFilename(const std::string &bootFilename);
-std::string ExpectedScreenshotFromFilename(const std::string &bootFilename);
-std::string GetTestName(const std::string &bootFilename);
+#include "Common/CommonWindows.h"
 
-bool CompareOutput(const std::string &bootFilename, const std::string &output, bool verbose);
-double CompareScreenshot(const u8 *pixels, int w, int h, int stride, const std::string screenshotFilename, std::string &error);
+// TODO: Get rid of this junk
+class WindowsHeadlessHostDx9 : public HeadlessHost
+{
+public:
+	virtual bool InitGL(std::string *error_message);
+	virtual void ShutdownGL();
+
+	virtual void SwapBuffers();
+
+	virtual void SendDebugOutput(const std::string &output);
+	virtual void SendDebugScreenshot(const u8 *pixbuf, u32 w, u32 h);
+	virtual void SetComparisonScreenshot(const std::string &filename);
+
+	virtual bool ShouldSkipUI() { return false; }
+
+private:
+	bool ResizeGL();
+	void LoadNativeAssets();
+
+	HWND hWnd;
+	HDC hDC;
+	HGLRC hRC;
+	FILE *out;
+	std::string comparisonScreenshot;
+};

@@ -40,12 +40,12 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename)
 
 	controllerIniFilename_ = controllerIniFilename != NULL ? controllerIniFilename : "controls.ini";
 
-	INFO_LOG(LOADER, "Loading config: %s", iniFilename_);
+	INFO_LOG(LOADER, "Loading config: %s", iniFilename_.c_str());
 	bSaveSettings = true;
 
 	IniFile iniFile;
 	if (!iniFile.Load(iniFilename_)) {
-		ERROR_LOG(LOADER, "Failed to read %s. Setting config to default.", iniFilename_);
+		ERROR_LOG(LOADER, "Failed to read %s. Setting config to default.", iniFilename_.c_str());
 		// Continue anyway to initialize the config.
 	}
 
@@ -67,7 +67,7 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename)
 		// TODO: Be smart about same language, different country
 	}
 
-	general->Get("Language", &languageIni, defaultLangRegion.c_str());
+	general->Get("Language", &sLanguageIni, defaultLangRegion.c_str());
 	general->Get("NumWorkerThreads", &iNumWorkerThreads, cpu_info.num_cores);
 	general->Get("EnableCheats", &bEnableCheats, false);
 	general->Get("ScreenshotsAsPNG", &bScreenshotsAsPNG, false);
@@ -147,6 +147,7 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename)
 
 	graphics->Get("FrameSkip", &iFrameSkip, 0);
 	graphics->Get("FrameRate", &iFpsLimit, 0);
+	graphics->Get("FrameSkipUnthrottle", &bFrameSkipUnthrottle, true);
 	graphics->Get("ForceMaxEmulatedFPS", &iForceMaxEmulatedFPS, 60);
 #ifdef USING_GLES2
 	graphics->Get("AnisotropyLevel", &iAnisotropyLevel, 0);
@@ -202,7 +203,7 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename)
 
 	IniFile::Section *pspConfig = iniFile.GetOrCreateSection("SystemParam");
 	pspConfig->Get("NickName", &sNickName, "PPSSPP");
-	pspConfig->Get("Language", &ilanguage, PSP_SYSTEMPARAM_LANGUAGE_ENGLISH);
+	pspConfig->Get("Language", &iLanguage, PSP_SYSTEMPARAM_LANGUAGE_ENGLISH);
 	pspConfig->Get("TimeFormat", &iTimeFormat, PSP_SYSTEMPARAM_TIME_FORMAT_24HR);
 	pspConfig->Get("DateFormat", &iDateFormat, PSP_SYSTEMPARAM_DATE_FORMAT_YYYYMMDD);
 	pspConfig->Get("TimeZone", &iTimeZone, 0);
@@ -231,12 +232,12 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename)
 	IniFile::Section *gleshacks = iniFile.GetOrCreateSection("GLESHacks");
 	gleshacks->Get("PrescaleUV", &bPrescaleUV, false);
 
-	INFO_LOG(LOADER, "Loading controller config: %s", controllerIniFilename_);
+	INFO_LOG(LOADER, "Loading controller config: %s", controllerIniFilename_.c_str());
 	bSaveSettings = true;
 
 	IniFile controllerIniFile;
 	if (!controllerIniFile.Load(controllerIniFilename_)) {
-		ERROR_LOG(LOADER, "Failed to read %s. Setting controller config to default.", controllerIniFilename_);
+		ERROR_LOG(LOADER, "Failed to read %s. Setting controller config to default.", controllerIniFilename_.c_str());
 		KeyMap::RestoreDefault();
 	} else {
 		// Continue anyway to initialize the config. It will just restore the defaults.
@@ -274,7 +275,7 @@ void Config::Save() {
 		general->Set("WindowWidth", iWindowWidth);
 		general->Set("WindowHeight", iWindowHeight);
 #endif
-		general->Set("Language", languageIni);
+		general->Set("Language", sLanguageIni);
 		general->Set("NumWorkerThreads", iNumWorkerThreads);
 		general->Set("EnableCheats", bEnableCheats);
 		general->Set("ScreenshotsAsPNG", bScreenshotsAsPNG);
@@ -312,6 +313,7 @@ void Config::Save() {
 		graphics->Set("InternalResolution", iInternalResolution);
 		graphics->Set("FrameSkip", iFrameSkip);
 		graphics->Set("FrameRate", iFpsLimit);
+		graphics->Set("FrameSkipUnthrottle", bFrameSkipUnthrottle);
 		graphics->Set("ForceMaxEmulatedFPS", iForceMaxEmulatedFPS);
 		graphics->Set("AnisotropyLevel", iAnisotropyLevel);
 		graphics->Set("VertexCache", bVertexCache);
@@ -349,7 +351,7 @@ void Config::Save() {
 
 		IniFile::Section *pspConfig = iniFile.GetOrCreateSection("SystemParam");
 		pspConfig->Set("NickName", sNickName.c_str());
-		pspConfig->Set("Language", ilanguage);
+		pspConfig->Set("Language", iLanguage);
 		pspConfig->Set("TimeFormat", iTimeFormat);
 		pspConfig->Set("DateFormat", iDateFormat);
 		pspConfig->Set("TimeZone", iTimeZone);

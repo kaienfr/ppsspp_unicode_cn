@@ -57,7 +57,7 @@ public:
 	bool bAutoSaveSymbolMap;
 	std::string sReportHost;
 	std::vector<std::string> recentIsos;
-	std::string languageIni;
+	std::string sLanguageIni;
 
 	// GFX
 	bool bSoftwareRendering;
@@ -70,6 +70,7 @@ public:
 	bool bStretchToDisplay;
 	bool bVSync;
 	int iFrameSkip;
+	bool bFrameSkipUnthrottle;
 
 	int iWindowX;
 	int iWindowY;
@@ -134,7 +135,7 @@ public:
 
 	// SystemParam
 	std::string sNickName;
-	int ilanguage;
+	int iLanguage;
 	int iTimeFormat;
 	int iDateFormat;
 	int iTimeZone;

@@ -23,7 +23,8 @@
 #endif
 #include "GPU/Null/NullGpu.h"
 #include "GPU/Software/SoftGpu.h"
-#if defined(_XBOX)
+#if defined(_XBOX) || defined(_WIN32)
+#include "GPU/Directx9/helper/global.h"
 #include "GPU/Directx9/GPU_DX9.h"
 #endif
 #include "Core/CoreParameter.h"
@@ -51,6 +52,8 @@ bool GPU_Init() {
 		break;
 	case GPU_DIRECTX9:
 #if defined(_XBOX)
+		gpu = new DIRECTX9_GPU();
+#elif defined(_WIN32)
 		gpu = new DIRECTX9_GPU();
 #endif
 		break;

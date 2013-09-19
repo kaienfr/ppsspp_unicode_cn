@@ -64,11 +64,12 @@ static const GLushort eqLookup[] = {
 #if defined(USING_GLES2)
 	GL_FUNC_ADD,
 	GL_FUNC_ADD,
+	GL_FUNC_ADD, // this is GE_BLENDMODE_ABSDIFF
 #else
 	GL_MIN,
 	GL_MAX,
+	GL_MAX, // this is GE_BLENDMODE_ABSDIFF
 #endif
-	GL_FUNC_ADD, // should be abs(diff)
 };
 
 static const GLushort cullingMode[] = {
@@ -327,16 +328,15 @@ void TransformDrawEngine::ApplyDrawState(int prim) {
 		renderY = 0.0f;
 		renderWidth = framebufferManager_->GetRenderWidth();
 		renderHeight = framebufferManager_->GetRenderHeight();
-		renderWidthFactor = (float)renderWidth / framebufferManager_->GetTargetWidth();
-		renderHeightFactor = (float)renderHeight / framebufferManager_->GetTargetHeight();
 	} else {
 		// TODO: Aspect-ratio aware and centered
 		float pixelW = PSP_CoreParameter().pixelWidth;
 		float pixelH = PSP_CoreParameter().pixelHeight;
 		CenterRect(&renderX, &renderY, &renderWidth, &renderHeight, 480, 272, pixelW, pixelH);
-		renderWidthFactor = renderWidth / 480.0f;
-		renderHeightFactor = renderHeight / 272.0f;
 	}
+	
+	renderWidthFactor = (float)renderWidth / framebufferManager_->GetTargetWidth();
+	renderHeightFactor = (float)renderHeight / framebufferManager_->GetTargetHeight();
 
 	bool throughmode = gstate.isModeThrough();
 

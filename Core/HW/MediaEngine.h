@@ -41,6 +41,8 @@ inline s64 getMpegTimeStamp(u8* buf) {
 		| ((s64)buf[1] << 32) | ((s64)buf[0] << 36);
 }
 
+bool InitFFmpeg();
+
 class MediaEngine
 {
 public:
@@ -57,6 +59,7 @@ public:
 	void setVideoStream(int streamNum) { m_videoStream = streamNum; }
 	void setAudioStream(int streamNum) { m_audioStream = streamNum; }
 
+	u8 *getFrameImage();
 	int getRemainSize();
 
 	bool stepVideo(int videoPixelMode);

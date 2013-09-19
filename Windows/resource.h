@@ -147,7 +147,6 @@
 // It's reserved for languages.
 #define ID_LANGUAGE_BASE 3000
 
-
 #define ID_FILE_EXIT                     40000
 #define ID_DEBUG_SAVEMAPFILE             40001
 #define ID_DISASM_ADDHLE                 40002
@@ -253,7 +252,11 @@
 #define ID_OPTIONS_WINDOW5X              40108
 #define ID_OPTIONS_BUFFEREDRENDERING     40109
 #define ID_DEBUG_SHOWDEBUGSTATISTICS     40110
-#define ID_DEBUG_DUMPMEMORY              40111
+#define ID_OPTIONS_SCREEN6X              40111
+#define ID_OPTIONS_SCREEN7X              40112
+#define ID_OPTIONS_SCREEN8X              40113
+#define ID_OPTIONS_SCREEN9X              40114
+#define ID_OPTIONS_SCREEN10X             40115
 
 // Dummy option to let the buffered rendering hotkey cycle through all the options.
 #define ID_OPTIONS_BUFFEREDRENDERINGDUMMY 40500

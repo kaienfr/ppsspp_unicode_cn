@@ -21,6 +21,8 @@
 #include "GPU/GPUInterface.h"
 #include "Core/HW/atrac3plus.h"
 
+#include <algorithm>
+
 #ifdef USE_FFMPEG
 
 // Urgh! Why is this needed?
@@ -81,6 +83,23 @@ static int getPixelFormatBytes(int pspFormat)
 		ERROR_LOG(ME, "Unknown pixel format");
 		return 4;
 	}
+}
+
+void ffmpeg_logger(void *, int, const char *format, va_list va_args) {
+	char tmp[1024];
+	vsprintf(tmp, format, va_args);
+	INFO_LOG(ME, "%s", tmp);
+}
+
+bool InitFFmpeg() {
+#ifdef _DEBUG
+	av_log_set_level(AV_LOG_VERBOSE);
+#else
+	av_log_set_level(AV_LOG_ERROR);
+#endif
+	av_log_set_callback(&ffmpeg_logger);
+
+	return true;
 }
 
 MediaEngine::MediaEngine(): m_pdata(0) {
@@ -192,21 +211,10 @@ int _MpegReadbuffer(void *opaque, uint8_t *buf, int buf_size)
 	return size;
 }
 
-#ifdef _DEBUG
-void ffmpeg_logger(void *, int, const char *format, va_list va_args) {
-	char tmp[1024];
-	vsprintf(tmp, format, va_args);
-	INFO_LOG(ME, "%s", tmp);
-}
-#endif
-
 bool MediaEngine::openContext() {
 #ifdef USE_FFMPEG
+	InitFFmpeg();
 
-#ifdef _DEBUG
-	av_log_set_level(AV_LOG_VERBOSE);
-	av_log_set_callback(&ffmpeg_logger);
-#endif 
 	if (m_pFormatCtx || !m_pdata)
 		return false;
 	m_mpegheaderReadPos = 0;
@@ -576,6 +584,10 @@ int MediaEngine::writeVideoImageWithRange(u8* buffer, int frameWidth, int videoP
 	return videoImageSize;
 #endif // USE_FFMPEG
 	return 0;
+}
+
+u8 *MediaEngine::getFrameImage() {
+	return m_pFrameRGB->data[0];
 }
 
 int MediaEngine::getRemainSize() {

@@ -15,17 +15,6 @@
 // Official git repository and contact information can be found at
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
-#include <string>
+#include "GPU/Common/TextureDecoder.h"
 
-#include "Globals.h"
-
-extern bool teamCityMode;
-extern std::string teamCityName;
-void TeamCityPrint(const char *fmt, ...);
-
-std::string ExpectedFromFilename(const std::string &bootFilename);
-std::string ExpectedScreenshotFromFilename(const std::string &bootFilename);
-std::string GetTestName(const std::string &bootFilename);
-
-bool CompareOutput(const std::string &bootFilename, const std::string &output, bool verbose);
-double CompareScreenshot(const u8 *pixels, int w, int h, int stride, const std::string screenshotFilename, std::string &error);
+// TODO: Move some common things into here.

@@ -24,6 +24,7 @@
 #include "Core/CoreTiming.h"
 #include "Core/Reporting.h"
 #include "Core/Config.h"
+#include "Core/HW/MediaEngine.h"
 #include "Common/ChunkFile.h"
 
 #include "sceKernel.h"
@@ -31,6 +32,7 @@
 #include "sceKernelMemory.h"
 #include "sceAtrac.h"
 
+#include <algorithm>
 
 #define ATRAC_ERROR_API_FAIL                 0x80630002
 #define ATRAC_ERROR_NO_ATRACID               0x80630003
@@ -1089,6 +1091,8 @@ int __AtracSetContext(Atrac *atrac)
 	}
 
 #ifdef USE_FFMPEG
+	InitFFmpeg();
+
 	u8* tempbuf = (u8*)av_malloc(atrac->atracBufSize);
 
 	atrac->pFormatCtx = avformat_alloc_context();

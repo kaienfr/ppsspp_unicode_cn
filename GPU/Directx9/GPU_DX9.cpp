@@ -27,6 +27,7 @@
 #include "GPU/ge_constants.h"
 #include "GPU/GeDisasm.h"
 
+#include "GPU/Directx9/helper/global.h"
 #include "GPU/Directx9/ShaderManagerDX9.h"
 #include "GPU/Directx9/GPU_DX9.h"
 #include "GPU/Directx9/FramebufferDX9.h"
@@ -389,7 +390,7 @@ DIRECTX9_GPU::DIRECTX9_GPU()
 	for (int i = 0; i < 0xEF; i++) {
 		if (dupeCheck.find((u8)i) == dupeCheck.end()) {
 			ERROR_LOG(G3D, "Command missing from table: %02x (%i)", i, i);
-	}
+		}
 	}
 
 	BuildReportingInfo();
