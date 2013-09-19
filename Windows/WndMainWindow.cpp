@@ -494,6 +494,7 @@ namespace MainWindow
 		TranslateMenuItem(ID_DEBUG_DISASSEMBLY, L"\tCtrl+D");
 		TranslateMenuItem(ID_DEBUG_LOG, L"\tCtrl+L");
 		TranslateMenuItem(ID_DEBUG_MEMORYVIEW, L"\tCtrl+M");
+		TranslateMenuItem(ID_DEBUG_DUMPMEMORY);
 
 		// Options menu
 		TranslateMenuItem(ID_OPTIONS_TOPMOST);
@@ -1268,6 +1269,20 @@ namespace MainWindow
 
 				case ID_DEBUG_IGNOREILLEGALREADS:
 					g_Config.bIgnoreBadMemAccess = !g_Config.bIgnoreBadMemAccess;
+					break;
+
+				case ID_DEBUG_DUMPMEMORY:
+					if (!Core_IsStepping()) // If emulator isn't paused
+					{   //pause game
+						SendMessage(MainWindow::GetHWND(), WM_COMMAND, ID_TOGGLE_PAUSE, 0);
+					}
+					FILE* outputfile;
+					outputfile = fopen("Ram.dump", "wb");
+					fwrite(Memory::GetPointer(0x08800000), 1, 0x01800000, outputfile);
+					fclose(outputfile);
+
+					// continue to run
+					SendMessage(MainWindow::GetHWND(), WM_COMMAND, ID_TOGGLE_PAUSE, 0);
 					break;
 
 				case ID_OPTIONS_FULLSCREEN:

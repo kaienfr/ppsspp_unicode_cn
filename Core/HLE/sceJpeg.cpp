@@ -20,6 +20,7 @@
 #include "Common.h"
 #include "native/ext/cityhash/city.h"
 #include "native/ext/jpge/jpgd.h"
+#include <algorithm>
 
 static int mjpegWidth, mjpegHeight;
 

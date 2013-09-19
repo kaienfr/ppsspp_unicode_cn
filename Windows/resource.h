@@ -257,6 +257,8 @@
 #define ID_OPTIONS_SCREEN8X              40113
 #define ID_OPTIONS_SCREEN9X              40114
 #define ID_OPTIONS_SCREEN10X             40115
+#define ID_DEBUG_DUMPMEMORY              40116
+
 
 // Dummy option to let the buffered rendering hotkey cycle through all the options.
 #define ID_OPTIONS_BUFFEREDRENDERINGDUMMY 40500

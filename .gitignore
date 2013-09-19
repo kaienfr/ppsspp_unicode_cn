@@ -18,6 +18,7 @@
 *.aps
 *.exp
 *.qdact
+*.vcxproj
 controls.ini
 Debug
 Release
