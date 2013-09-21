@@ -231,8 +231,15 @@ namespace MainWindow
 		ResizeDisplay();
 	}
 
-	void SetInternalResolution(int res) {
-		g_Config.iInternalResolution = res;
+	void SetInternalResolution(int res = -1) {
+		if (res >= 0 && res <= RESOLUTION_MAX)
+			g_Config.iInternalResolution = res;
+		else {
+			if (++g_Config.iInternalResolution > RESOLUTION_MAX)
+				g_Config.iInternalResolution = 0;
+		}
+
+		ResizeDisplay(true);
 	}
 
 	void CorrectCursor() {
@@ -564,8 +571,13 @@ namespace MainWindow
 		if(gpu) gpu->ClearCacheNextFrame();
 	}
 
-	void setRenderingMode(int mode) {
-		g_Config.iRenderingMode = mode;
+	void setRenderingMode(int mode = -1) {
+		if (mode >= FB_NON_BUFFERED_MODE)
+			g_Config.iRenderingMode = mode;
+		else {
+			if (++g_Config.iRenderingMode > FB_READFBOMEMORY_GPU)
+				g_Config.iRenderingMode = FB_NON_BUFFERED_MODE;
+		}
 
 		I18NCategory *g = GetI18NCategory("Graphics");
 
@@ -594,8 +606,13 @@ namespace MainWindow
 		g_Config.iFpsLimit = fps;
 	}
 
-	void setFrameSkipping(int framesToSkip) {
-		g_Config.iFrameSkip = framesToSkip;
+	void setFrameSkipping(int framesToSkip = -1) {
+		if (framesToSkip >= FRAMESKIP_OFF)
+			g_Config.iFrameSkip = framesToSkip;
+		else {
+			if (++g_Config.iFrameSkip > FRAMESKIP_MAX)
+				g_Config.iFrameSkip = FRAMESKIP_OFF;
+		}
 
 		I18NCategory *g = GetI18NCategory("Graphics");
 		const char *frameskipStr = g->T("Frame Skipping");
@@ -1122,17 +1139,17 @@ namespace MainWindow
 					SaveState::SaveSlot(g_Config.iCurrentStateSlot, SaveStateActionFinished);
 					break;
 
-				case ID_OPTIONS_SCREENAUTO: SetInternalResolution(0); ResizeDisplay(true); break;
-				case ID_OPTIONS_SCREEN1X:   SetInternalResolution(1); ResizeDisplay(true); break;
-				case ID_OPTIONS_SCREEN2X:   SetInternalResolution(2); ResizeDisplay(true); break;
-				case ID_OPTIONS_SCREEN3X:   SetInternalResolution(3); ResizeDisplay(true); break;
-				case ID_OPTIONS_SCREEN4X:   SetInternalResolution(4); ResizeDisplay(true); break;
-				case ID_OPTIONS_SCREEN5X:   SetInternalResolution(5); ResizeDisplay(true); break;
-				case ID_OPTIONS_SCREEN6X:   SetInternalResolution(6); ResizeDisplay(true); break;
-				case ID_OPTIONS_SCREEN7X:   SetInternalResolution(7); ResizeDisplay(true); break;
-				case ID_OPTIONS_SCREEN8X:   SetInternalResolution(8); ResizeDisplay(true); break;
-				case ID_OPTIONS_SCREEN9X:   SetInternalResolution(9); ResizeDisplay(true); break;
-				case ID_OPTIONS_SCREEN10X:   SetInternalResolution(10); ResizeDisplay(true); break;
+				case ID_OPTIONS_SCREENAUTO: SetInternalResolution(RESOLUTION_AUTO); break;
+				case ID_OPTIONS_SCREEN1X:   SetInternalResolution(RESOLUTION_NATIVE); break;
+				case ID_OPTIONS_SCREEN2X:   SetInternalResolution(RESOLUTION_2X); break;
+				case ID_OPTIONS_SCREEN3X:   SetInternalResolution(RESOLUTION_3X); break;
+				case ID_OPTIONS_SCREEN4X:   SetInternalResolution(RESOLUTION_4X); break;
+				case ID_OPTIONS_SCREEN5X:   SetInternalResolution(RESOLUTION_5X); break;
+				case ID_OPTIONS_SCREEN6X:   SetInternalResolution(RESOLUTION_6X); break;
+				case ID_OPTIONS_SCREEN7X:   SetInternalResolution(RESOLUTION_7X); break;
+				case ID_OPTIONS_SCREEN8X:   SetInternalResolution(RESOLUTION_8X); break;
+				case ID_OPTIONS_SCREEN9X:   SetInternalResolution(RESOLUTION_9X); break;
+				case ID_OPTIONS_SCREEN10X:   SetInternalResolution(RESOLUTION_MAX); break;
 
 				case ID_OPTIONS_WINDOW1X:   SetWindowSize(1); break;
 				case ID_OPTIONS_WINDOW2X:   SetWindowSize(2); break;
@@ -1141,10 +1158,7 @@ namespace MainWindow
 					
 				case ID_OPTIONS_RESOLUTIONDUMMY:
 					{
-						static int resolutionMultiplier = 0;
-						resolutionMultiplier = g_Config.iInternalResolution <= 10 ? ++resolutionMultiplier : 0;
-						SetInternalResolution(resolutionMultiplier);
-						ResizeDisplay(true);
+						SetInternalResolution();
 						break;
 					}
 
@@ -1176,9 +1190,7 @@ namespace MainWindow
 
 				// Dummy option to let the buffered rendering hotkey cycle through all the options.
 				case ID_OPTIONS_BUFFEREDRENDERINGDUMMY:
-					g_Config.iRenderingMode = ++g_Config.iRenderingMode > FB_READFBOMEMORY_GPU ? FB_NON_BUFFERED_MODE : g_Config.iRenderingMode;
-
-					setRenderingMode(g_Config.iRenderingMode);
+					setRenderingMode();
 					break;
 
 				case ID_DEBUG_SHOWDEBUGSTATISTICS:
@@ -1208,9 +1220,7 @@ namespace MainWindow
 				case ID_OPTIONS_FRAMESKIP_8:    setFrameSkipping(FRAMESKIP_MAX); break;
 
 				case ID_OPTIONS_FRAMESKIPDUMMY:
-					g_Config.iFrameSkip = ++g_Config.iFrameSkip > FRAMESKIP_MAX ? FRAMESKIP_OFF : g_Config.iFrameSkip;
-
-					setFrameSkipping(g_Config.iFrameSkip);
+					setFrameSkipping();
 					break;
 
 				case ID_FILE_EXIT:
@@ -1569,11 +1579,11 @@ namespace MainWindow
 			ID_OPTIONS_SCREEN9X,
 			ID_OPTIONS_SCREEN10X,
 		};
-		if (g_Config.iInternalResolution < 0)
-			g_Config.iInternalResolution = 0;
+		if (g_Config.iInternalResolution < RESOLUTION_AUTO)
+			g_Config.iInternalResolution = RESOLUTION_AUTO;
 
-		else if(g_Config.iInternalResolution > 10)
-			g_Config.iInternalResolution = 5;
+		else if (g_Config.iInternalResolution > RESOLUTION_MAX)
+			g_Config.iInternalResolution = RESOLUTION_MAX;
 
 		for (int i = 0; i < ARRAY_SIZE(zoomitems); i++) {
 			CheckMenuItem(menu, zoomitems[i], MF_BYCOMMAND | ((i == g_Config.iInternalResolution) ? MF_CHECKED : MF_UNCHECKED));

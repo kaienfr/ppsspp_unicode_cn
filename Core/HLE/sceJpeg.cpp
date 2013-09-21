@@ -22,6 +22,8 @@
 #include "native/ext/jpge/jpgd.h"
 #include <algorithm>
 
+#include <algorithm>
+
 static int mjpegWidth, mjpegHeight;
 
 void __JpegInit() {

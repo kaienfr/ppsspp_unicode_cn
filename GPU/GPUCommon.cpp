@@ -157,7 +157,7 @@ int GPUCommon::ListSync(int listid, int mode) {
 	return PSP_GE_LIST_COMPLETED;
 }
 
-u32 GPUCommon::EnqueueList(u32 listpc, u32 stall, int subIntrBase, bool head) {
+u32 GPUCommon::EnqueueList(u32 listpc, u32 stall, int subIntrBase, PSPPointer<PspGeListArgs> args, bool head) {
 	easy_guard guard(listLock);
 	// TODO Check the stack values in missing arg and ajust the stack depth
 
@@ -219,6 +219,11 @@ u32 GPUCommon::EnqueueList(u32 listpc, u32 stall, int subIntrBase, bool head) {
 	dl.interrupted = false;
 	dl.waitTicks = (u64)-1;
 	dl.interruptsEnabled = interruptsEnabled_;
+	dl.started = false;
+	if (args.IsValid() && args->context.IsValid())
+		dl.context = args->context;
+	else
+		dl.context = NULL;
 
 	if (head) {
 		if (currentList) {
@@ -409,6 +414,11 @@ bool GPUCommon::InterpretList(DisplayList &list) {
 	//	return false;
 	currentList = &list;
 
+	if (!list.started && list.context != NULL) {
+		gstate.Save(list.context);
+	}
+	list.started = true;
+
 	// I don't know if this is the correct place to zero this, but something
 	// need to do it. See Sol Trigger title screen.
 	// TODO: Maybe this is per list?  Should a stalled list remember the old value?
@@ -530,17 +540,6 @@ void GPUCommon::ReapplyGfxStateInternal() {
 	// ShaderManager_DirtyShader();
 	// The commands are embedded in the command memory so we can just reexecute the words. Convenient.
 	// To be safe we pass 0xFFFFFFFF as the diff.
-	/*
-	ExecuteOp(gstate.cmdmem[GE_CMD_ALPHABLENDENABLE], 0xFFFFFFFF);
-	ExecuteOp(gstate.cmdmem[GE_CMD_ALPHATESTENABLE], 0xFFFFFFFF);
-	ExecuteOp(gstate.cmdmem[GE_CMD_BLENDMODE], 0xFFFFFFFF);
-	ExecuteOp(gstate.cmdmem[GE_CMD_ZTEST], 0xFFFFFFFF);
-	ExecuteOp(gstate.cmdmem[GE_CMD_ZTESTENABLE], 0xFFFFFFFF);
-	ExecuteOp(gstate.cmdmem[GE_CMD_CULL], 0xFFFFFFFF);
-	ExecuteOp(gstate.cmdmem[GE_CMD_CULLFACEENABLE], 0xFFFFFFFF);
-	ExecuteOp(gstate.cmdmem[GE_CMD_SCISSOR1], 0xFFFFFFFF);
-	ExecuteOp(gstate.cmdmem[GE_CMD_SCISSOR2], 0xFFFFFFFF);
-	*/
 
 	for (int i = GE_CMD_VERTEXTYPE; i < GE_CMD_BONEMATRIXNUMBER; i++) {
 		if (i != GE_CMD_ORIGIN) {
@@ -550,7 +549,7 @@ void GPUCommon::ReapplyGfxStateInternal() {
 
 	// Can't write to bonematrixnumber here
 
-	for (int i = GE_CMD_MORPHWEIGHT0; i < GE_CMD_PATCHFACING; i++) {
+	for (int i = GE_CMD_MORPHWEIGHT0; i <= GE_CMD_PATCHFACING; i++) {
 		ExecuteOp(gstate.cmdmem[i], 0xFFFFFFFF);
 	}
 
@@ -560,7 +559,7 @@ void GPUCommon::ReapplyGfxStateInternal() {
 		ExecuteOp(gstate.cmdmem[i], 0xFFFFFFFF);
 	}
 
-	// TODO: there's more...
+	// Let's just skip the transfer size stuff, it's just values.
 }
 
 inline void GPUCommon::UpdateState(GPUState state) {
@@ -684,6 +683,7 @@ void GPUCommon::ExecuteOp(u32 op, u32 diff) {
 				auto &stackEntry = currentList->stack[currentList->stackptr++];
 				stackEntry.pc = retval;
 				stackEntry.offsetAddr = gstate_c.offsetAddr;
+				// The base address is NOT saved/restored for a regular call.
 				UpdatePC(currentList->pc, target - 4);
 				currentList->pc = target - 4;	// pc will be increased after we return, counteract that
 			}
@@ -778,6 +778,7 @@ void GPUCommon::ExecuteOp(u32 op, u32 diff) {
 							auto &stackEntry = currentList->stack[currentList->stackptr++];
 							stackEntry.pc = currentList->pc;
 							stackEntry.offsetAddr = gstate_c.offsetAddr;
+							stackEntry.baseAddr = gstate.base;
 							UpdatePC(currentList->pc, target);
 							currentList->pc = target;
 							DEBUG_LOG(G3D, "Signal with Call. signal/end: %04x %04x", signal, enddata);
@@ -794,6 +795,7 @@ void GPUCommon::ExecuteOp(u32 op, u32 diff) {
 							// TODO: This might save/restore other state...
 							auto &stackEntry = currentList->stack[--currentList->stackptr];
 							gstate_c.offsetAddr = stackEntry.offsetAddr;
+							gstate.base = stackEntry.baseAddr;
 							UpdatePC(currentList->pc, stackEntry.pc);
 							currentList->pc = stackEntry.pc;
 							DEBUG_LOG(G3D, "Signal with Return. signal/end: %04x %04x", signal, enddata);
@@ -839,6 +841,9 @@ void GPUCommon::ExecuteOp(u32 op, u32 diff) {
 					currentList->waitTicks = startingTicks + cyclesExecuted;
 					busyTicks = std::max(busyTicks, currentList->waitTicks);
 					__GeTriggerSync(WAITTYPE_GELISTSYNC, currentList->id, currentList->waitTicks);
+					if (currentList->started && currentList->context != NULL) {
+						gstate.Restore(currentList->context);
+					}
 				}
 				break;
 			}
@@ -895,6 +900,9 @@ void GPUCommon::InterruptEnd(int listid) {
 	dl.pendingInterrupt = false;
 	// TODO: Unless the signal handler could change it?
 	if (dl.state == PSP_GE_DL_STATE_COMPLETED || dl.state == PSP_GE_DL_STATE_NONE) {
+		if (dl.started && dl.context != NULL) {
+			gstate.Restore(dl.context);
+		}
 		dl.waitTicks = 0;
 		__GeTriggerWait(WAITTYPE_GELISTSYNC, listid);
 	}
