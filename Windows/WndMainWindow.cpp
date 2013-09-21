@@ -1739,7 +1739,7 @@ namespace MainWindow
 				W32Util::CenterWindow(hDlg);
 				HWND versionBox = GetDlgItem(hDlg, IDC_VERSION);
 				char temp[256];
-				sprintf(temp, "PPSSPP %s", PPSSPP_GIT_VERSION);
+				sprintf(temp, "PPSSPP v0.9.1 中文修订版");
 				SetWindowTextA(versionBox, temp);
 			}
 			return TRUE;
