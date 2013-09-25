@@ -261,6 +261,7 @@
 #define ID_DEBUG_GEDEBUGGER              40116
 #define IDC_GEDBG_BREAK                  40117
 #define IDC_GEDBG_RESUME                 40118
+#define ID_DEBUG_DUMPMEMORY              40300
 
 // Dummy option to let the buffered rendering hotkey cycle through all the options.
 #define ID_OPTIONS_BUFFEREDRENDERINGDUMMY 40500
