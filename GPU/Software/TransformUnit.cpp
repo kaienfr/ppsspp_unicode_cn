@@ -15,6 +15,7 @@
 // Official git repository and contact information can be found at
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
+#include "Core/Host.h"
 #include "../GPUState.h"
 #include "../GLES/VertexDecoder.h"
 
@@ -118,14 +119,14 @@ static VertexData ReadVertex(VertexReader& vreader)
 			vertex.normal = -vertex.normal;
 	}
 
-	if (gstate.isSkinningEnabled() && !gstate.isModeThrough()) {
+	if (vertTypeIsSkinningEnabled(gstate.vertType) && !gstate.isModeThrough()) {
 		float W[8] = { 1.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f };
 		vreader.ReadWeights(W);
 
 		Vec3<float> tmppos(0.f, 0.f, 0.f);
 		Vec3<float> tmpnrm(0.f, 0.f, 0.f);
 
-		for (int i = 0; i < gstate.getNumBoneWeights(); ++i) {
+		for (int i = 0; i < vertTypeGetNumBoneWeights(gstate.vertType); ++i) {
 			Mat3x3<float> bone(&gstate.boneMatrix[12*i]);
 			tmppos += W[i] * (bone * ModelCoords(pos[0], pos[1], pos[2]) + Vec3<float>(gstate.boneMatrix[12*i+9], gstate.boneMatrix[12*i+10], gstate.boneMatrix[12*i+11]));
 			if (vreader.hasNormal())
@@ -258,6 +259,7 @@ void TransformUnit::SubmitSpline(void* control_points, void* indices, int count_
 		}
 	}
 	delete[] patches;
+	host->GPUNotifyDraw();
 }
 
 void TransformUnit::SubmitPrimitive(void* vertices, void* indices, u32 prim_type, int vertex_count, u32 vertex_type)
@@ -402,4 +404,6 @@ void TransformUnit::SubmitPrimitive(void* vertices, void* indices, u32 prim_type
 			}
 		}
 	}
+
+	host->GPUNotifyDraw();
 }

@@ -1,4 +1,4 @@
-// Copyright (c) 2012- PPSSPP Project.
+// Copyright (c) 2013- PPSSPP Project.
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -15,20 +15,15 @@
 // Official git repository and contact information can be found at
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
-
 #pragma once
 
-#include "Debugger/Debugger_Disasm.h"
-#include "Debugger/Debugger_MemoryDlg.h"
-#include "Windows/GEDebugger/GEDebugger.h"
+#include "Common/CommonTypes.h"
+#include "GPU/Math3D.h"
 
-#include "Common/CommonWindows.h"
-
-#define MAX_CPUCOUNT 1
-
-extern CDisasm *disasmWindow[MAX_CPUCOUNT];
-extern CGEDebugger *geDebuggerWindow ;
-extern CMemoryDlg *memoryWindow[MAX_CPUCOUNT];
-
-extern HMENU g_hPopupMenus;
-extern bool g_debuggerActive;
+// PSP compatible format so we can use the end of the pipeline in beziers etc
+struct SimpleVertex {
+	float uv[2];
+	u8 color[4];
+	Vec3f nrm;
+	Vec3f pos;
+};

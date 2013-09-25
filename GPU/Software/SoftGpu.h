@@ -17,7 +17,8 @@
 
 #pragma once
 
-#include "../GPUCommon.h"
+#include "GPU/GPUCommon.h"
+#include "GPU/Common/GPUDebugInterface.h"
 
 typedef struct {
 	union {
@@ -54,7 +55,9 @@ public:
 	virtual void ExecuteOp(u32 op, u32 diff);
 
 	virtual void BeginFrame() {}
-	virtual void SetDisplayFramebuffer(u32 framebuf, u32 stride, GEBufferFormat format) {}
+	virtual void SetDisplayFramebuffer(u32 framebuf, u32 stride, GEBufferFormat format) {
+		host->GPUNotifyDisplay(framebuf, stride, format);
+	}
 	virtual void CopyDisplayToOutput();
 	virtual void UpdateStats();
 	virtual void InvalidateCache(u32 addr, int size, GPUInvalidationType type);
@@ -69,6 +72,8 @@ public:
 		primaryInfo = "Software";
 		fullInfo = "Software";
 	}
+
+	virtual bool GetCurrentFramebuffer(GPUDebugBuffer &buffer);
 
 protected:
 	virtual void FastRunLoop(DisplayList &list);

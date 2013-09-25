@@ -90,18 +90,16 @@ public:
 	u16 drawsUntilNextFullHash;
 };
 
-
 // Handles transform, lighting and drawing.
 class TransformDrawEngine : public GfxResourceHolder {
 public:
 	TransformDrawEngine();
 	virtual ~TransformDrawEngine();
-	void SubmitPrim(void *verts, void *inds, GEPrimitiveType prim, int vertexCount, u32 vertexType, int forceIndexType, int *bytesRead);
-	void SubmitSpline(void* control_points, void* indices, int count_u, int count_v, int type_u, int type_v, GEPatchPrimType prim_type, u32 vertex_type);
-	void SubmitBezier(void* control_points, void* indices, int count_u, int count_v, GEPatchPrimType prim_type, u32 vertex_type);
 
-	// legacy
-	void DrawBezier(int ucount, int vcount);
+	void SubmitPrim(void *verts, void *inds, GEPrimitiveType prim, int vertexCount, u32 vertType, int forceIndexType, int *bytesRead);
+	void SubmitSpline(void* control_points, void* indices, int count_u, int count_v, int type_u, int type_v, GEPatchPrimType prim_type, u32 vertType);
+	void SubmitBezier(void* control_points, void* indices, int count_u, int count_v, GEPatchPrimType prim_type, u32 vertType);
+	bool TestBoundingBox(void* control_points, int vertexCount, u32 vertType);
 
 	void DecodeVerts();
 	void SetShaderManager(ShaderManager *shaderManager) {
@@ -137,6 +135,9 @@ private:
 	void SoftwareTransformAndDraw(int prim, u8 *decoded, LinkedShader *program, int vertexCount, u32 vertexType, void *inds, int indexType, const DecVtxFormat &decVtxFormat, int maxIndex);
 	void ApplyDrawState(int prim);
 	bool IsReallyAClear(int numVerts) const;
+
+	// Preprocessing for spline/bezier
+	u32 NormalizeVertices(u8 *outPtr, u8 *bufPtr, const u8 *inPtr, int lowerBound, int upperBound, u32 vertType);
 
 	// drawcall ID
 	u32 ComputeFastDCID();
@@ -175,6 +176,9 @@ private:
 	TransformedVertex *transformedExpanded;
 
 	std::map<u32, VertexArrayInfo *> vai_;
+
+	// Fixed index buffer for easy quad generation from spline/bezier
+	u16 *quadIndices_;
 
 	// Vertex buffer objects
 	// Element buffer objects

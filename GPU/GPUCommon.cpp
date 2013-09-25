@@ -15,6 +15,7 @@
 #include "Core/HLE/sceGe.h"
 
 GPUCommon::GPUCommon() :
+	nextListID(0),
 	currentList(NULL),
 	isbreak(false),
 	drawCompleteTicks(0),
@@ -45,6 +46,17 @@ void GPUCommon::PopDLQueue() {
 			currentList = NULL;
 		}
 	}
+}
+
+bool GPUCommon::BusyDrawing() {
+	u32 state = DrawSync(1);
+	if (state == PSP_GE_LIST_DRAWING || state == PSP_GE_LIST_STALLING) {
+		lock_guard guard(listLock);
+		if (currentList && currentList->state != PSP_GE_DL_STATE_PAUSED) {
+			return true;
+		}
+	}
+	return false;
 }
 
 u32 GPUCommon::DrawSync(int mode) {
@@ -157,6 +169,33 @@ int GPUCommon::ListSync(int listid, int mode) {
 	return PSP_GE_LIST_COMPLETED;
 }
 
+int GPUCommon::GetStack(int index, u32 stackPtr) {
+	easy_guard guard(listLock);
+	if (currentList == NULL) {
+		// Seems like it doesn't return an error code?
+		return 0;
+	}
+
+	if (currentList->stackptr <= index) {
+		return SCE_KERNEL_ERROR_INVALID_INDEX;
+	}
+
+	if (index >= 0) {
+		PSPPointer<u32> stack;
+		stack = stackPtr;
+		if (stack.IsValid()) {
+			auto entry = currentList->stack[index];
+			// Not really sure what most of these values are.
+			stack[0] = 0;
+			stack[1] = entry.pc + 4;
+			stack[2] = entry.offsetAddr;
+			stack[7] = entry.baseAddr;
+		}
+	}
+
+	return currentList->stackptr;
+}
+
 u32 GPUCommon::EnqueueList(u32 listpc, u32 stall, int subIntrBase, PSPPointer<PspGeListArgs> args, bool head) {
 	easy_guard guard(listLock);
 	// TODO Check the stack values in missing arg and ajust the stack depth
@@ -175,8 +214,7 @@ u32 GPUCommon::EnqueueList(u32 listpc, u32 stall, int subIntrBase, PSPPointer<Ps
 	}
 
 	u64 currentTicks = CoreTiming::GetTicks();
-	for (int i = 0; i < DisplayListMaxCount; ++i)
-	{
+	for (int i = 0; i < DisplayListMaxCount; ++i) {
 		if (dls[i].state != PSP_GE_DL_STATE_NONE && dls[i].state != PSP_GE_DL_STATE_COMPLETED) {
 			if (dls[i].pc == listpc && !oldCompatibility) {
 				ERROR_LOG(G3D, "sceGeListEnqueue: can't enqueue, list address %08X already used", listpc);
@@ -187,26 +225,31 @@ u32 GPUCommon::EnqueueList(u32 listpc, u32 stall, int subIntrBase, PSPPointer<Ps
 			//	return 0x80000021;
 			//}
 		}
-		if (dls[i].state == PSP_GE_DL_STATE_NONE && !dls[i].pendingInterrupt)
-		{
-			// Prefer a list that isn't used
-			id = i;
+	}
+	for (int i = 0; i < DisplayListMaxCount; ++i) {
+		int possibleID = (i + nextListID) % DisplayListMaxCount;
+		auto possibleList = dls[possibleID];
+		if (possibleList.pendingInterrupt) {
+			continue;
+		}
+
+		if (possibleList.state == PSP_GE_DL_STATE_NONE) {
+			id = possibleID;
 			break;
 		}
-		if (id < 0 && dls[i].state == PSP_GE_DL_STATE_COMPLETED && !dls[i].pendingInterrupt && dls[i].waitTicks < currentTicks)
-		{
-			id = i;
+		if (possibleList.state == PSP_GE_DL_STATE_COMPLETED && possibleList.waitTicks < currentTicks) {
+			id = possibleID;
 		}
 	}
-	if (id < 0)
-	{
+	if (id < 0) {
 		ERROR_LOG_REPORT(G3D, "No DL ID available to enqueue");
-		for(auto it = dlQueue.begin(); it != dlQueue.end(); ++it) {
+		for (auto it = dlQueue.begin(); it != dlQueue.end(); ++it) {
 			DisplayList &dl = dls[*it];
 			DEBUG_LOG(G3D, "DisplayList %d status %d pc %08x stall %08x", *it, dl.state, dl.pc, dl.stall);
 		}
 		return SCE_KERNEL_ERROR_OUT_OF_MEMORY;
 	}
+	nextListID = id + 1;
 
 	DisplayList &dl = dls[id];
 	dl.id = id;
@@ -220,6 +263,9 @@ u32 GPUCommon::EnqueueList(u32 listpc, u32 stall, int subIntrBase, PSPPointer<Ps
 	dl.waitTicks = (u64)-1;
 	dl.interruptsEnabled = interruptsEnabled_;
 	dl.started = false;
+	dl.offsetAddr = 0;
+	dl.bboxResult = false;
+
 	if (args.IsValid() && args->context.IsValid())
 		dl.context = args->context;
 	else
@@ -259,17 +305,18 @@ u32 GPUCommon::DequeueList(int listid) {
 	if (listid < 0 || listid >= DisplayListMaxCount || dls[listid].state == PSP_GE_DL_STATE_NONE)
 		return SCE_KERNEL_ERROR_INVALID_ID;
 
-	if (dls[listid].state == PSP_GE_DL_STATE_RUNNING || dls[listid].state == PSP_GE_DL_STATE_PAUSED)
-		return 0x80000021;
+	auto &dl = dls[listid];
+	if (dl.started)
+		return SCE_KERNEL_ERROR_BUSY;
 
-	dls[listid].state = PSP_GE_DL_STATE_NONE;
+	dl.state = PSP_GE_DL_STATE_NONE;
 
 	if (listid == dlQueue.front())
 		PopDLQueue();
 	else
 		dlQueue.remove(listid);
 
-	dls[listid].waitTicks = 0;
+	dl.waitTicks = 0;
 	__GeTriggerWait(WAITTYPE_GELISTSYNC, listid);
 
 	CheckDrawSync();
@@ -281,11 +328,14 @@ u32 GPUCommon::UpdateStall(int listid, u32 newstall) {
 	easy_guard guard(listLock);
 	if (listid < 0 || listid >= DisplayListMaxCount || dls[listid].state == PSP_GE_DL_STATE_NONE)
 		return SCE_KERNEL_ERROR_INVALID_ID;
+	auto &dl = dls[listid];
+	if (dl.state == PSP_GE_DL_STATE_COMPLETED)
+		return SCE_KERNEL_ERROR_ALREADY;
 
-	dls[listid].stall = newstall & 0x0FFFFFFF;
+	dl.stall = newstall & 0x0FFFFFFF;
 
-	if (dls[listid].signal == PSP_GE_SIGNAL_HANDLER_PAUSE)
-		dls[listid].signal = PSP_GE_SIGNAL_HANDLER_SUSPEND;
+	if (dl.signal == PSP_GE_SIGNAL_HANDLER_PAUSE)
+		dl.signal = PSP_GE_SIGNAL_HANDLER_SUSPEND;
 	
 	guard.unlock();
 	ProcessDLQueue();
@@ -341,7 +391,7 @@ u32 GPUCommon::Break(int mode) {
 		return SCE_KERNEL_ERROR_INVALID_MODE;
 
 	if (!currentList)
-		return 0x80000020;
+		return SCE_KERNEL_ERROR_ALREADY;
 
 	if (mode == 1)
 	{
@@ -353,6 +403,7 @@ u32 GPUCommon::Break(int mode) {
 			dls[i].signal = PSP_GE_SIGNAL_NONE;
 		}
 
+		nextListID = 0;
 		currentList = NULL;
 		return 0;
 	}
@@ -373,9 +424,9 @@ u32 GPUCommon::Break(int mode) {
 				ERROR_LOG_REPORT(G3D, "sceGeBreak: can't break signal-pausing list");
 			}
 			else
-				return 0x80000020;
+				return SCE_KERNEL_ERROR_ALREADY;
 		}
-		return 0x80000021;
+		return SCE_KERNEL_ERROR_BUSY;
 	}
 
 	if (currentList->state == PSP_GE_DL_STATE_QUEUED)
@@ -419,16 +470,14 @@ bool GPUCommon::InterpretList(DisplayList &list) {
 	}
 	list.started = true;
 
-	// I don't know if this is the correct place to zero this, but something
-	// need to do it. See Sol Trigger title screen.
-	// TODO: Maybe this is per list?  Should a stalled list remember the old value?
-	gstate_c.offsetAddr = 0;
+	gstate_c.offsetAddr = list.offsetAddr;
 
 	if (!Memory::IsValidAddress(list.pc)) {
 		ERROR_LOG_REPORT(G3D, "DL PC = %08x WTF!!!!", list.pc);
 		return true;
 	}
 
+	// TODO: Use new interface.
 #if defined(USING_QT_UI)
 	if (host->GpuStep()) {
 		host->SendGPUStart();
@@ -443,9 +492,8 @@ bool GPUCommon::InterpretList(DisplayList &list) {
 	gpuState = list.pc == list.stall ? GPUSTATE_STALL : GPUSTATE_RUNNING;
 	guard.unlock();
 
-	const bool dumpThisFrame = dumpThisFrame_;
-	// TODO: Add check for displaylist debugger.
-	const bool useFastRunLoop = !dumpThisFrame;
+	const bool useDebugger = host->GPUDebuggingActive();
+	const bool useFastRunLoop = !dumpThisFrame_ && !useDebugger;
 	while (gpuState == GPUSTATE_RUNNING) {
 		{
 			easy_guard innerGuard(listLock);
@@ -477,6 +525,8 @@ bool GPUCommon::InterpretList(DisplayList &list) {
 		UpdatePC(list.pc - 4, list.pc);
 	}
 
+	list.offsetAddr = gstate_c.offsetAddr;
+
 	if (g_Config.bShowDebugStats) {
 		time_update();
 		gpuStats.msProcessingDisplayLists += time_now_d() - start;
@@ -489,9 +539,11 @@ void GPUCommon::SlowRunLoop(DisplayList &list)
 	const bool dumpThisFrame = dumpThisFrame_;
 	while (downcount > 0)
 	{
+		host->GPUNotifyCommand(list.pc);
 		u32 op = Memory::ReadUnchecked_U32(list.pc);
 		u32 cmd = op >> 24;
 
+		// TODO: Replace.
 #if defined(USING_QT_UI)
 		if (host->GpuStep())
 			host->SendGPUWait(cmd, list.pc, &gstate);
@@ -603,6 +655,9 @@ void GPUCommon::ProcessDLQueueInternal() {
 	cyclesExecuted = 0;
 	UpdateTickEstimate(std::max(busyTicks, startingTicks + cyclesExecuted));
 
+	// Game might've written new texture data.
+	gstate_c.textureChanged = true;
+
 	// Seems to be correct behaviour to process the list anyway?
 	if (startingTicks < busyTicks) {
 		DEBUG_LOG(G3D, "Can't execute a list yet, still busy for %lld ticks", busyTicks - startingTicks);
@@ -665,6 +720,20 @@ void GPUCommon::ExecuteOp(u32 op, u32 diff) {
 				currentList->pc = target - 4; // pc will be increased after we return, counteract that
 			} else {
 				ERROR_LOG_REPORT(G3D, "JUMP to illegal address %08x - ignoring! data=%06x", target, data);
+			}
+		}
+		break;
+
+	case GE_CMD_BJUMP:
+		if (!currentList->bboxResult) {
+			// bounding box jump.
+			easy_guard guard(listLock);
+			u32 target = gstate_c.getRelativeAddress(data);
+			if (Memory::IsValidAddress(target)) {
+				UpdatePC(currentList->pc, target - 4);
+				currentList->pc = target - 4; // pc will be increased after we return, counteract that
+			} else {
+				ERROR_LOG_REPORT(G3D, "BJUMP to illegal address %08x - ignoring! data=%06x", target, data);
 			}
 		}
 		break;
@@ -843,6 +912,7 @@ void GPUCommon::ExecuteOp(u32 op, u32 diff) {
 					__GeTriggerSync(WAITTYPE_GELISTSYNC, currentList->id, currentList->waitTicks);
 					if (currentList->started && currentList->context != NULL) {
 						gstate.Restore(currentList->context);
+						ReapplyGfxStateInternal();
 					}
 				}
 				break;
@@ -902,6 +972,7 @@ void GPUCommon::InterruptEnd(int listid) {
 	if (dl.state == PSP_GE_DL_STATE_COMPLETED || dl.state == PSP_GE_DL_STATE_NONE) {
 		if (dl.started && dl.context != NULL) {
 			gstate.Restore(dl.context);
+			ReapplyGfxState();
 		}
 		dl.waitTicks = 0;
 		__GeTriggerWait(WAITTYPE_GELISTSYNC, listid);
@@ -925,4 +996,102 @@ void GPUCommon::SyncEnd(WaitType waitType, int listid, bool wokeThreads) {
 			}
 		}
 	}
+}
+
+bool GPUCommon::GetCurrentDisplayList(DisplayList &list) {
+	easy_guard guard(listLock);
+	if (!currentList) {
+		return false;
+	}
+	list = *currentList;
+	return true;
+}
+
+std::vector<DisplayList> GPUCommon::ActiveDisplayLists() {
+	std::vector<DisplayList> result;
+
+	easy_guard guard(listLock);
+	for (auto it = dlQueue.begin(), end = dlQueue.end(); it != end; ++it) {
+		result.push_back(dls[*it]);
+	}
+
+	return result;
+}
+
+void GPUCommon::ResetListPC(int listID, u32 pc) {
+	if (listID < 0 || listID >= DisplayListMaxCount) {
+		_dbg_assert_msg_(G3D, false, "listID out of range: %d", listID);
+		return;
+	}
+
+	easy_guard guard(listLock);
+	dls[listID].pc = pc;
+}
+
+void GPUCommon::ResetListStall(int listID, u32 stall) {
+	if (listID < 0 || listID >= DisplayListMaxCount) {
+		_dbg_assert_msg_(G3D, false, "listID out of range: %d", listID);
+		return;
+	}
+
+	easy_guard guard(listLock);
+	dls[listID].stall = stall;
+}
+
+void GPUCommon::ResetListState(int listID, DisplayListState state) {
+	if (listID < 0 || listID >= DisplayListMaxCount) {
+		_dbg_assert_msg_(G3D, false, "listID out of range: %d", listID);
+		return;
+	}
+
+	easy_guard guard(listLock);
+	dls[listID].state = state;
+}
+
+GPUDebugOp GPUCommon::DissassembleOp(u32 pc, u32 op) {
+	char buffer[1024];
+	GeDisassembleOp(pc, op, Memory::Read_U32(pc - 4), buffer);
+
+	GPUDebugOp info;
+	info.pc = pc;
+	info.cmd = op >> 24;
+	info.op = op;
+	info.desc = buffer;
+	return info;
+}
+
+std::vector<GPUDebugOp> GPUCommon::DissassembleOpRange(u32 startpc, u32 endpc) {
+	char buffer[1024];
+	std::vector<GPUDebugOp> result;
+	GPUDebugOp info;
+
+	u32 prev = Memory::Read_U32(startpc - 4);
+	for (u32 pc = startpc; pc < endpc; pc += 4) {
+		u32 op = Memory::Read_U32(pc);
+		GeDisassembleOp(pc, op, prev, buffer);
+		prev = op;
+
+		info.pc = pc;
+		info.cmd = op >> 24;
+		info.op = op;
+		info.desc = buffer;
+		result.push_back(info);
+	}
+	return result;
+}
+
+u32 GPUCommon::GetRelativeAddress(u32 data) {
+	return gstate_c.getRelativeAddress(data);
+}
+
+u32 GPUCommon::GetVertexAddress() {
+	return gstate_c.vertexAddr;
+}
+
+u32 GPUCommon::GetIndexAddress() {
+	return gstate_c.indexAddr;
+}
+
+GPUgstate GPUCommon::GetGState() {
+	return gstate;
 }

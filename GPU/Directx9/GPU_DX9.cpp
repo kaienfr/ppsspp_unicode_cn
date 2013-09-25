@@ -470,6 +470,7 @@ void DIRECTX9_GPU::BeginFrameInternal() {
 }
 
 void DIRECTX9_GPU::SetDisplayFramebuffer(u32 framebuf, u32 stride, GEBufferFormat format) {
+	host->GPUNotifyDisplay(framebuf, stride, format);
 	framebufferManager_.SetDisplayFramebuffer(framebuf, stride, format);
 }
 
@@ -616,7 +617,7 @@ void DIRECTX9_GPU::ExecuteOp(u32 op, u32 diff) {
 				break;
 
 			// Discard AA lines in Summon Night 5
-			if ((prim == GE_PRIM_LINES) && gstate.isAntiAliasEnabled() && gstate.isSkinningEnabled())
+			if ((prim == GE_PRIM_LINES) && gstate.isAntiAliasEnabled() && vertTypeIsSkinningEnabled(gstate.vertType))
 				break;
 
 			// This also make skipping drawing very effective.
@@ -723,17 +724,16 @@ void DIRECTX9_GPU::ExecuteOp(u32 op, u32 diff) {
 		}
 		break;
 
-	case GE_CMD_BJUMP:
-		// bounding box jump. Let's just not jump, for now.
-		break;
-
 	case GE_CMD_BOUNDINGBOX:
-		// bounding box test. Let's do nothing.
+		if (data != 0)
+			WARN_LOG_REPORT_ONCE(boundingbox, G3D, "Unsupported bounding box: %06x", data);
+		// bounding box test. Let's assume the box was within the drawing region.
+		currentList->bboxResult = true;
 		break;
 
 	case GE_CMD_VERTEXTYPE:
 		if (diff)
-		shaderManager_->DirtyUniform(DIRTY_UVSCALEOFFSET);
+			shaderManager_->DirtyUniform(DIRTY_UVSCALEOFFSET);
 		break;
 
 	case GE_CMD_REGION1:

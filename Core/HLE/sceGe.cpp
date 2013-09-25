@@ -337,8 +337,12 @@ u32 sceGeListEnQueue(u32 listAddress, u32 stallAddress, int callbackId,
 	optParam = optParamAddr;
 
 	u32 listID = gpu->EnqueueList(listAddress, stallAddress, __GeSubIntrBase(callbackId), optParam, false);
+	if ((int)listID >= 0)
+		listID = 0x35000000 ^ listID;
 
 	DEBUG_LOG(SCEGE, "List %i enqueued.", listID);
+	hleEatCycles(490);
+	CoreTiming::ForceCheck();
 	return listID;
 }
 
@@ -352,31 +356,38 @@ u32 sceGeListEnQueueHead(u32 listAddress, u32 stallAddress, int callbackId,
 	optParam = optParamAddr;
 
 	u32 listID = gpu->EnqueueList(listAddress, stallAddress, __GeSubIntrBase(callbackId), optParam, true);
+	if ((int)listID >= 0)
+		listID = 0x35000000 ^ listID;
 
 	DEBUG_LOG(SCEGE, "List %i enqueued.", listID);
+	hleEatCycles(480);
+	CoreTiming::ForceCheck();
 	return listID;
 }
 
 int sceGeListDeQueue(u32 listID)
 {
 	WARN_LOG(SCEGE, "sceGeListDeQueue(%08x)", listID);
-	int result = gpu->DequeueList(listID);
+	int result = gpu->DequeueList(0x35000000 ^ listID);
 	hleReSchedule("dlist dequeued");
 	return result;
 }
 
 int sceGeListUpdateStallAddr(u32 displayListID, u32 stallAddress)
 {
-	DEBUG_LOG(SCEGE, "sceGeListUpdateStallAddr(dlid=%i, stalladdr=%08x)", displayListID, stallAddress);
+	// Advance() might cause an interrupt, so defer the Advance but do it ASAP.
+	// Final Fantasy Type-0 has a graphical artifact without this (timing issue.)
 	hleEatCycles(190);
-	CoreTiming::Advance();
-	return gpu->UpdateStall(displayListID, stallAddress);
+	CoreTiming::ForceCheck();
+
+	DEBUG_LOG(SCEGE, "sceGeListUpdateStallAddr(dlid=%i, stalladdr=%08x)", displayListID, stallAddress);
+	return gpu->UpdateStall(0x35000000 ^ displayListID, stallAddress);
 }
 
 int sceGeListSync(u32 displayListID, u32 mode) //0 : wait for completion		1:check and return
 {
 	DEBUG_LOG(SCEGE, "sceGeListSync(dlid=%08x, mode=%08x)", displayListID, mode);
-	return gpu->ListSync(displayListID, mode);
+	return gpu->ListSync(0x35000000 ^ displayListID, mode);
 }
 
 u32 sceGeDrawSync(u32 mode)
@@ -392,11 +403,28 @@ int sceGeContinue()
 	return gpu->Continue();
 }
 
-int sceGeBreak(u32 mode)
+int sceGeBreak(u32 mode, u32 unknownPtr)
 {
+	if (mode > 1)
+	{
+		WARN_LOG(SCEGE, "sceGeBreak(mode=%d, unknown=%08x): invalid mode", mode, unknownPtr);
+		return SCE_KERNEL_ERROR_INVALID_MODE;
+	}
+	// Not sure what this is supposed to be for...
+	if ((int)unknownPtr < 0 || (int)unknownPtr + 16 < 0)
+	{
+		WARN_LOG_REPORT(SCEGE, "sceGeBreak(mode=%d, unknown=%08x): invalid ptr", mode, unknownPtr);
+		return 0x80000023;
+	}
+	else if (unknownPtr != 0)
+		WARN_LOG_REPORT(SCEGE, "sceGeBreak(mode=%d, unknown=%08x): unknown ptr (%s)", mode, unknownPtr, Memory::IsValidAddress(unknownPtr) ? "valid" : "invalid");
+
 	//mode => 0 : current dlist 1: all drawing
-	DEBUG_LOG(SCEGE, "sceGeBreak(mode=%d)", mode);
-	return gpu->Break(mode);
+	DEBUG_LOG(SCEGE, "sceGeBreak(mode=%d, unknown=%08x)", mode, unknownPtr);
+	int result = gpu->Break(mode);
+	if (result >= 0 && mode == 0)
+		return 0x35000000 ^ result;
+	return result;
 }
 
 u32 sceGeSetCallback(u32 structAddr)
@@ -470,7 +498,7 @@ u32 sceGeSaveContext(u32 ctxAddr)
 	DEBUG_LOG(SCEGE, "sceGeSaveContext(%08x)", ctxAddr);
 	gpu->SyncThread();
 
-	if (gpu->DrawSync(1) != PSP_GE_LIST_COMPLETED)
+	if (gpu->BusyDrawing())
 	{
 		WARN_LOG(SCEGE, "sceGeSaveContext(%08x): lists in process, aborting", ctxAddr);
 		// Real error code.
@@ -493,7 +521,7 @@ u32 sceGeRestoreContext(u32 ctxAddr)
 	DEBUG_LOG(SCEGE, "sceGeRestoreContext(%08x)", ctxAddr);
 	gpu->SyncThread();
 
-	if (gpu->DrawSync(1) != PSP_GE_LIST_COMPLETED)
+	if (gpu->BusyDrawing())
 	{
 		WARN_LOG(SCEGE, "sceGeRestoreContext(%08x): lists in process, aborting", ctxAddr);
 		return SCE_KERNEL_ERROR_BUSY;
@@ -508,8 +536,13 @@ u32 sceGeRestoreContext(u32 ctxAddr)
 	return 0;
 }
 
-int sceGeGetMtx(int type, u32 matrixPtr)
-{
+void __GeCopyMatrix(u32 matrixPtr, float *mtx, u32 size) {
+	for (u32 i = 0; i < size / sizeof(float); ++i) {
+		Memory::Write_U32(toFloat24(mtx[i]), matrixPtr + i * sizeof(float));
+	}
+}
+
+int sceGeGetMtx(int type, u32 matrixPtr) {
 	if (!Memory::IsValidAddress(matrixPtr)) {
 		ERROR_LOG(SCEGE, "sceGeGetMtx(%d, %08x) - bad matrix ptr", type, matrixPtr);
 		return -1;
@@ -527,37 +560,45 @@ int sceGeGetMtx(int type, u32 matrixPtr)
 	case GE_MTX_BONE7:
 		{
 			int n = type - GE_MTX_BONE0;
-			Memory::Memcpy(matrixPtr, gstate.boneMatrix + n * 12, 12 * sizeof(float));
+			__GeCopyMatrix(matrixPtr, gstate.boneMatrix + n * 12, 12 * sizeof(float));
 		}
 		break;
 	case GE_MTX_TEXGEN:
-		Memory::Memcpy(matrixPtr, gstate.tgenMatrix, 12 * sizeof(float));
+		__GeCopyMatrix(matrixPtr, gstate.tgenMatrix, 12 * sizeof(float));
 		break;
 	case GE_MTX_WORLD:
-		Memory::Memcpy(matrixPtr, gstate.worldMatrix, 12 * sizeof(float));
+		__GeCopyMatrix(matrixPtr, gstate.worldMatrix, 12 * sizeof(float));
 		break;
 	case GE_MTX_VIEW:
-		Memory::Memcpy(matrixPtr, gstate.viewMatrix, 12 * sizeof(float));
+		__GeCopyMatrix(matrixPtr, gstate.viewMatrix, 12 * sizeof(float));
 		break;
 	case GE_MTX_PROJECTION:
-		Memory::Memcpy(matrixPtr, gstate.projMatrix, 16 * sizeof(float));
+		__GeCopyMatrix(matrixPtr, gstate.projMatrix, 16 * sizeof(float));
 		break;
+	default:
+		return SCE_KERNEL_ERROR_INVALID_INDEX;
 	}
 	return 0;
 }
 
-u32 sceGeGetCmd(int cmd)
-{
+u32 sceGeGetCmd(int cmd) {
 	INFO_LOG(SCEGE, "sceGeGetCmd(%i)", cmd);
-	return gstate.cmdmem[cmd];  // Does not mask away the high bits.
+	if (cmd >= 0 && cmd < ARRAY_SIZE(gstate.cmdmem)) {
+		return gstate.cmdmem[cmd];  // Does not mask away the high bits.
+	} else {
+		return SCE_KERNEL_ERROR_INVALID_INDEX;
+	}
 }
 
-u32 sceGeEdramSetAddrTranslation(int new_size)
-{
+int sceGeGetStack(int index, u32 stackPtr) {
+	WARN_LOG_REPORT(SCEGE, "sceGeGetStack(%i, %08x)", index, stackPtr);
+	return gpu->GetStack(index, stackPtr);
+}
+
+u32 sceGeEdramSetAddrTranslation(int new_size) {
 	bool outsideRange = new_size != 0 && (new_size < 0x200 || new_size > 0x1000);
 	bool notPowerOfTwo = (new_size & (new_size - 1)) != 0;
-	if (outsideRange || notPowerOfTwo)
-	{
+	if (outsideRange || notPowerOfTwo) {
 		WARN_LOG(SCEGE, "sceGeEdramSetAddrTranslation(%i): invalid value", new_size);
 		return SCE_KERNEL_ERROR_INVALID_VALUE;
 	}
@@ -577,7 +618,7 @@ const HLEFunction sceGe_user[] =
 	{0xE0D68148, WrapI_UU<sceGeListUpdateStallAddr>,    "sceGeListUpdateStallAddr"},
 	{0x03444EB4, WrapI_UU<sceGeListSync>,               "sceGeListSync"},
 	{0xB287BD61, WrapU_U<sceGeDrawSync>,                "sceGeDrawSync"},
-	{0xB448EC0D, WrapI_U<sceGeBreak>,                   "sceGeBreak"},
+	{0xB448EC0D, WrapI_UU<sceGeBreak>,                  "sceGeBreak"},
 	{0x4C06E472, WrapI_V<sceGeContinue>,                "sceGeContinue"},
 	{0xA4FC06A4, WrapU_U<sceGeSetCallback>,             "sceGeSetCallback"},
 	{0x05DB22CE, WrapI_U<sceGeUnsetCallback>,           "sceGeUnsetCallback"},
@@ -588,6 +629,7 @@ const HLEFunction sceGe_user[] =
 	{0x438A385A, WrapU_U<sceGeSaveContext>,             "sceGeSaveContext"},
 	{0x0BF608FB, WrapU_U<sceGeRestoreContext>,          "sceGeRestoreContext"},
 	{0x5FB86AB0, WrapI_U<sceGeListDeQueue>,             "sceGeListDeQueue"},
+	{0xE66CB92E, WrapI_IU<sceGeGetStack>,               "sceGeGetStack"},
 };
 
 void Register_sceGe_user()

@@ -26,6 +26,9 @@
     <Filter Include="Other Platforms">
       <UniqueIdentifier>{d53d0871-8572-4393-822e-d14db0a88dab}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Windows\GE Debugger">
+      <UniqueIdentifier>{15f0e146-e39c-4bad-ba10-3c714a7dbf74}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Debugger\CtrlDisAsmView.cpp">
@@ -109,6 +112,12 @@
     </ClCompile>
     <ClCompile Include="Debugger\Debugger_Lists.cpp">
       <Filter>Windows\Debugger</Filter>
+    </ClCompile>
+    <ClCompile Include="GEDebugger\GEDebugger.cpp">
+      <Filter>Windows\GE Debugger</Filter>
+    </ClCompile>
+    <ClCompile Include="GEDebugger\SimpleGLWindow.cpp">
+      <Filter>Windows\GE Debugger</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -196,6 +205,12 @@
     </ClInclude>
     <ClInclude Include="Debugger\Debugger_Lists.h">
       <Filter>Windows\Debugger</Filter>
+    </ClInclude>
+    <ClInclude Include="GEDebugger\GEDebugger.h">
+      <Filter>Windows\GE Debugger</Filter>
+    </ClInclude>
+    <ClInclude Include="GEDebugger\SimpleGLWindow.h">
+      <Filter>Windows\GE Debugger</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

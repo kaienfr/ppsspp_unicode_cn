@@ -1135,7 +1135,7 @@ void TransformDrawEngineDX9::DoFlush() {
 	GEPrimitiveType prim = prevPrim_;
 	ApplyDrawState(prim);
 
-	LinkedShaderDX9 *program = shaderManager_->ApplyShader(prim);
+	LinkedShaderDX9 *program = shaderManager_->ApplyShader(prim, lastVType_);
 
 		if (program->useHWTransform_) {
 			LPDIRECT3DVERTEXBUFFER9 vb_ = NULL;
@@ -1332,6 +1332,10 @@ rotateVBO:
 		collectedVerts = 0;
 		numDrawCalls = 0;
 		prevPrim_ = GE_PRIM_INVALID;
+
+#ifndef _XBOX
+		host->GPUNotifyDraw();
+#endif
 }
 
 };

@@ -38,6 +38,7 @@
 #include "Windows/OpenGLBase.h"
 #include "Windows/Debugger/Debugger_Disasm.h"
 #include "Windows/Debugger/Debugger_MemoryDlg.h"
+#include "Windows/GEDebugger/GEDebugger.h"
 #include "main.h"
 
 #include "Core/Core.h"
@@ -73,7 +74,6 @@
 #define ENABLE_TOUCH 0
 
 extern std::map<int, int> windowsTransTable;
-BOOL g_bFullScreen = FALSE;
 static RECT g_normalRC = {0};
 static std::wstring windowTitle;
 extern bool g_TakeScreenshot;
@@ -243,7 +243,7 @@ namespace MainWindow
 	}
 
 	void CorrectCursor() {
-		bool autoHide = g_bFullScreen && !mouseButtonDown && globalUIState == UISTATE_INGAME;
+		bool autoHide = g_Config.bFullScreen && !mouseButtonDown && globalUIState == UISTATE_INGAME;
 		if (autoHide && hideCursor) {
 			while (cursorCounter >= 0) {
 				cursorCounter = ShowCursor(FALSE);
@@ -275,7 +275,7 @@ namespace MainWindow
 		::SetWindowPos(hWnd, HWND_NOTOPMOST, x, y, cx, cy, SWP_FRAMECHANGED);
 
 		// Reset full screen indicator.
-		g_bFullScreen = FALSE;
+		g_Config.bFullScreen = false;
 		CorrectCursor();
 		ResizeDisplay();
 		ShowOwnedPopups(hwndMain, TRUE);
@@ -303,7 +303,7 @@ namespace MainWindow
 		::SetWindowPos(hWnd, HWND_TOPMOST, x, y, cx, cy, SWP_FRAMECHANGED);
 
 		// Set full screen indicator.
-		g_bFullScreen = TRUE;
+		g_Config.bFullScreen = true;
 		CorrectCursor();
 		ResizeDisplay();
 		ShowOwnedPopups(hwndMain, FALSE);
@@ -499,6 +499,7 @@ namespace MainWindow
 		TranslateMenuItem(ID_DEBUG_IGNOREILLEGALREADS);
 		TranslateMenuItem(ID_DEBUG_RUNONLOAD);
 		TranslateMenuItem(ID_DEBUG_DISASSEMBLY, L"\tCtrl+D");
+		TranslateMenuItem(ID_DEBUG_GEDEBUGGER);
 		TranslateMenuItem(ID_DEBUG_LOG, L"\tCtrl+L");
 		TranslateMenuItem(ID_DEBUG_MEMORYVIEW, L"\tCtrl+M");
 		TranslateMenuItem(ID_DEBUG_DUMPMEMORY);
@@ -651,23 +652,49 @@ namespace MainWindow
 		windowTitle = title;
 	}
 
-	BOOL Show(HINSTANCE hInstance, int nCmdShow) {
-		hInst = hInstance; // Store instance handle in our global variable.
-
+	RECT DetermineWindowRectangle() {
 		RECT rc;
+
+		if (!g_Config.bFullScreen) {
+			const int screenWidth = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+			const int screenHeight = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+			const int screenX = GetSystemMetrics(SM_XVIRTUALSCREEN);
+			const int screenY = GetSystemMetrics(SM_YVIRTUALSCREEN);
+
+			bool visibleHorizontally = ((g_Config.iWindowX + g_Config.iWindowWidth) >= screenX) &&
+				((g_Config.iWindowX + g_Config.iWindowWidth) < (screenWidth + g_Config.iWindowWidth));
+
+			bool visibleVertically = ((g_Config.iWindowY + g_Config.iWindowHeight) >= screenY) &&
+				((g_Config.iWindowY + g_Config.iWindowHeight) < (screenHeight + g_Config.iWindowHeight));
+
+			if (!visibleHorizontally)
+				g_Config.iWindowX = 0;
+
+			if (!visibleVertically)
+				g_Config.iWindowY = 0;
+		}
+
 		rc.left = g_Config.iWindowX;
 		rc.top = g_Config.iWindowY;
-		if (g_Config.iWindowWidth == 0) {
+		if (g_Config.iWindowWidth <= 0 || g_Config.iWindowHeight <= 0) {
 			RECT rcInner = rc, rcOuter;
 			GetWindowRectAtResolution(2 * 480, 2 * 272, rcInner, rcOuter);
 			rc.right = rc.left + (rcOuter.right - rcOuter.left);
-			rc.bottom = rc.top + (rcOuter.bottom- rcOuter.top);
+			rc.bottom = rc.top + (rcOuter.bottom - rcOuter.top);
 			g_Config.iWindowWidth = rc.right - rc.left;
 			g_Config.iWindowHeight = rc.bottom - rc.top;
 		} else {
 			rc.right = g_Config.iWindowX + g_Config.iWindowWidth;
 			rc.bottom = g_Config.iWindowY + g_Config.iWindowHeight;
 		}
+
+		return rc;
+	}
+
+	BOOL Show(HINSTANCE hInstance, int nCmdShow) {
+		hInst = hInstance; // Store instance handle in our global variable.
+
+		RECT rc = DetermineWindowRectangle();
 
 		u32 style = WS_OVERLAPPEDWINDOW;
 
@@ -740,6 +767,9 @@ namespace MainWindow
 		DialogManager::AddDlg(disasmWindow[0]);
 		disasmWindow[0]->Show(g_Config.bShowDebuggerOnLoad);
 
+		geDebuggerWindow = new CGEDebugger(MainWindow::GetHInstance(), MainWindow::GetHWND());
+		DialogManager::AddDlg(geDebuggerWindow);
+
 		memoryWindow[0] = new CMemoryDlg(MainWindow::GetHInstance(), MainWindow::GetHWND(), currentDebugMIPS);
 		DialogManager::AddDlg(memoryWindow[0]);
 	}
@@ -800,7 +830,8 @@ namespace MainWindow
 	}
 
 	LRESULT CALLBACK DisplayProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
-		int factor = g_Config.iWindowWidth < (480 + 80) ? 2 : 1;
+		// Only apply a factor > 1 in windowed mode.
+		int factor = !g_Config.bFullScreen && g_Config.iWindowWidth < (480 + 80) ? 2 : 1;
 
 		switch (message) {
 		case WM_ACTIVATE:
@@ -1269,6 +1300,10 @@ namespace MainWindow
 					disasmWindow[0]->Show(true);
 					break;
 
+				case ID_DEBUG_GEDEBUGGER:
+					geDebuggerWindow->Show(true);
+					break;
+
 				case ID_DEBUG_MEMORYVIEW:
 					memoryWindow[0]->Show(true);
 					break;
@@ -1296,12 +1331,13 @@ namespace MainWindow
 					break;
 
 				case ID_OPTIONS_FULLSCREEN:
-					g_Config.bFullScreen = !g_Config.bFullScreen ;
-					if(g_bFullScreen) {
-						_ViewNormal(hWnd); 
-					} else {
+					g_Config.bFullScreen = !g_Config.bFullScreen;
+
+					if (g_Config.bFullScreen)
 						_ViewFullScreen(hWnd);
-					}
+					else
+						_ViewNormal(hWnd);
+
 					break;
 
 				case ID_OPTIONS_VERTEXCACHE:
@@ -1484,10 +1520,7 @@ namespace MainWindow
 			PostQuitMessage(0);
 			break;
 
-		case WM_USER+1:
-			if (g_Config.bFullScreen)
-				_ViewFullScreen(hWnd);
-
+		case WM_USER + 1:
 			disasmWindow[0]->NotifyMapLoaded();
 			memoryWindow[0]->NotifyMapLoaded();
 

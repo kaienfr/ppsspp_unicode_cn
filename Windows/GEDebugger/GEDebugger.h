@@ -15,20 +15,24 @@
 // Official git repository and contact information can be found at
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
-
 #pragma once
 
-#include "Debugger/Debugger_Disasm.h"
-#include "Debugger/Debugger_MemoryDlg.h"
-#include "Windows/GEDebugger/GEDebugger.h"
-
 #include "Common/CommonWindows.h"
+#include "Globals.h"
+#include "Windows/resource.h"
+#include "Windows/W32Util/DialogManager.h"
+#include "Windows/GEDebugger/SimpleGLWindow.h"
 
-#define MAX_CPUCOUNT 1
+class CGEDebugger : public Dialog {
+public:
+	CGEDebugger(HINSTANCE _hInstance, HWND _hParent);
+	~CGEDebugger();
 
-extern CDisasm *disasmWindow[MAX_CPUCOUNT];
-extern CGEDebugger *geDebuggerWindow ;
-extern CMemoryDlg *memoryWindow[MAX_CPUCOUNT];
+protected:
+	BOOL DlgProc(UINT message, WPARAM wParam, LPARAM lParam);
 
-extern HMENU g_hPopupMenus;
-extern bool g_debuggerActive;
+private:
+	void SetupFrameWindow();
+
+	SimpleGLWindow *frameWindow;
+};

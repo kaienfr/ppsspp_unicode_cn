@@ -28,12 +28,32 @@ using std::min;
 using std::max;
 
 
+enum LineType { LINE_UP, LINE_DOWN, LINE_RIGHT };
+
+struct BranchLine
+{
+	u32 first;
+	u32 second;
+	LineType type;
+	int laneIndex;
+};
+
+struct DisassemblyFunction
+{
+	u32 hash;
+	std::vector<BranchLine> lines;
+};
+
 class CtrlDisAsmView
 {
 	HWND wnd;
 	HFONT font;
 	HFONT boldfont;
 	RECT rect;
+
+	std::map<u32,DisassemblyFunction> functions;
+	std::vector<u32> visibleFunctionAddresses;
+	std::vector<BranchLine> strayLines;
 
 	u32 curAddress;
 	u32 selectRangeStart;
@@ -78,6 +98,7 @@ class CtrlDisAsmView
 	bool getDisasmAddressText(u32 address, char* dest, bool abbreviateLabels);
 	void parseDisasm(const char* disasm, char* opcode, char* arguments);
 	void updateStatusBarText();
+	void drawBranchLine(HDC hdc, BranchLine& line);
 public:
 	CtrlDisAsmView(HWND _wnd);
 	~CtrlDisAsmView();
@@ -97,7 +118,14 @@ public:
 	void scrollAddressIntoView();
 	bool curAddressIsVisible();
 	void redraw();
-	
+	void scanFunctions();
+	void clearFunctions()
+	{
+		functions.clear();
+		visibleFunctionAddresses.clear();
+		strayLines.clear();
+	};
+
 	void getOpcodeText(u32 address, char* dest);
 	u32 yToAddress(int y);
 
@@ -123,6 +151,7 @@ public:
 		}
 
 		setCurAddress(newAddress);
+		scanFunctions();
 		redraw();
 	}
 	void gotoPC()
@@ -144,6 +173,7 @@ public:
 	void scrollWindow(int lines)
 	{
 		windowStart += lines*instructionSize;
+		scanFunctions();
 		redraw();
 	}
 

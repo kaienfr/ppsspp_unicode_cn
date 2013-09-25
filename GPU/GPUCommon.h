@@ -3,6 +3,7 @@
 #include "Common/Common.h"
 #include "Core/ThreadEventQueue.h"
 #include "GPU/GPUInterface.h"
+#include "GPU/Common/GPUDebugInterface.h"
 
 #if defined(ANDROID)
 #include <atomic>
@@ -12,7 +13,7 @@
 
 typedef ThreadEventQueue<GPUInterface, GPUEvent, GPUEventType, GPU_EVENT_INVALID, GPU_EVENT_SYNC_THREAD, GPU_EVENT_FINISH_EVENT_LOOP> GPUThreadEventQueue;
 
-class GPUCommon : public GPUThreadEventQueue
+class GPUCommon : public GPUThreadEventQueue, public GPUDebugInterface
 {
 public:
 	GPUCommon();
@@ -34,6 +35,7 @@ public:
 	virtual u32  DequeueList(int listid);
 	virtual int  ListSync(int listid, int mode);
 	virtual u32  DrawSync(int mode);
+	virtual int  GetStack(int index, u32 stackPtr);
 	virtual void DoState(PointerWrap &p);
 	virtual bool FramebufferDirty() {
 		SyncThread();
@@ -43,6 +45,7 @@ public:
 		SyncThread();
 		return true;
 	}
+	virtual bool BusyDrawing();
 	virtual u32  Continue();
 	virtual u32  Break(int mode);
 	virtual void ReapplyGfxState();
@@ -91,6 +94,7 @@ protected:
 
 	typedef std::list<int> DisplayListQueue;
 
+	int nextListID;
 	DisplayList dls[DisplayListMaxCount];
 	DisplayList *currentList;
 	DisplayListQueue dlQueue;
@@ -134,6 +138,21 @@ private:
 	}
 
 public:
+	// From GPUDebugInterface.
+	virtual bool GetCurrentDisplayList(DisplayList &list);
+	virtual std::vector<DisplayList> ActiveDisplayLists();
+	virtual void ResetListPC(int listID, u32 pc);
+	virtual void ResetListStall(int listID, u32 stall);
+	virtual void ResetListState(int listID, DisplayListState state);
+
+	virtual GPUDebugOp DissassembleOp(u32 pc, u32 op);
+	virtual std::vector<GPUDebugOp> DissassembleOpRange(u32 startpc, u32 endpc);
+
+	virtual u32 GetRelativeAddress(u32 data);
+	virtual u32 GetVertexAddress();
+	virtual u32 GetIndexAddress();
+	virtual GPUgstate GetGState();
+
 	virtual DisplayList* getList(int listid)
 	{
 		return &dls[listid];
@@ -142,10 +161,6 @@ public:
 	const std::list<int>& GetDisplayLists()
 	{
 		return dlQueue;
-	}
-	DisplayList* GetCurrentDisplayList()
-	{
-		return currentList;
 	}
 	virtual bool DecodeTexture(u8* dest, GPUgstate state)
 	{

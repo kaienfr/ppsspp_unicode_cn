@@ -23,13 +23,8 @@
 #include "../../Core/HLE/sceKernelInterrupt.h"
 #include "../../Core/HLE/sceGe.h"
 
-NullGPU::NullGPU()
-{
-}
-
-NullGPU::~NullGPU()
-{
-}
+NullGPU::NullGPU() { }
+NullGPU::~NullGPU() { }
 
 void NullGPU::FastRunLoop(DisplayList &list) {
 	for (; downcount > 0; --downcount) {
@@ -44,8 +39,7 @@ void NullGPU::FastRunLoop(DisplayList &list) {
 	}
 }
 
-void NullGPU::ExecuteOp(u32 op, u32 diff)
-{
+void NullGPU::ExecuteOp(u32 op, u32 diff) {
 	u32 cmd = op >> 24;
 	u32 data = op & 0xFFFFFF;
 
@@ -56,14 +50,12 @@ void NullGPU::ExecuteOp(u32 op, u32 diff)
 		DEBUG_LOG(G3D,"DL BASE: %06x", data);
 		break;
 
-	case GE_CMD_VADDR:		/// <<8????
-		gstate_c.vertexAddr = ((gstate.base & 0x00FF0000) << 8)|data;
-		DEBUG_LOG(G3D,"DL VADDR: %06x", gstate_c.vertexAddr);
+	case GE_CMD_VADDR:
+		gstate_c.vertexAddr = gstate_c.getRelativeAddress(data);
 		break;
 
 	case GE_CMD_IADDR:
-		gstate_c.indexAddr	= ((gstate.base & 0x00FF0000) << 8)|data;
-		DEBUG_LOG(G3D,"DL IADDR: %06x", gstate_c.indexAddr);
+		gstate_c.indexAddr	= gstate_c.getRelativeAddress(data);
 		break;
 
 	case GE_CMD_PRIM:
@@ -103,14 +95,11 @@ void NullGPU::ExecuteOp(u32 op, u32 diff)
 		}
 		break;
 
-	case GE_CMD_BJUMP:
-		// bounding box jump. Let's just not jump, for now.
-		DEBUG_LOG(G3D,"DL BBOX JUMP - unimplemented");
-		break;
-
 	case GE_CMD_BOUNDINGBOX:
-		// bounding box test. Let's do nothing.
-		DEBUG_LOG(G3D,"DL BBOX TEST - unimplemented");
+		if (data != 0)
+			DEBUG_LOG(G3D, "Unsupported bounding box: %06x", data);
+		// bounding box test. Let's assume the box was within the drawing region.
+		currentList->bboxResult = true;
 		break;
 
 	case GE_CMD_VERTEXTYPE:
@@ -589,53 +578,71 @@ void NullGPU::ExecuteOp(u32 op, u32 diff)
 		break;
 
 	case GE_CMD_WORLDMATRIXNUMBER:
-		DEBUG_LOG(G3D,"DL World matrix # %i", data);
 		gstate.worldmtxnum = data&0xF;
 		break;
 
 	case GE_CMD_WORLDMATRIXDATA:
-		DEBUG_LOG(G3D,"DL World matrix data # %f", getFloat24(data));
-		gstate.worldMatrix[gstate.worldmtxnum++] = getFloat24(data);
+		{
+			int num = gstate.worldmtxnum & 0xF;
+			if (num < 12) {
+				gstate.worldMatrix[num] = getFloat24(data);
+			}
+			gstate.worldmtxnum = (++num) & 0xF;
+		}
 		break;
 
 	case GE_CMD_VIEWMATRIXNUMBER:
-		DEBUG_LOG(G3D,"DL VIEW matrix # %i", data);
 		gstate.viewmtxnum = data&0xF;
 		break;
 
 	case GE_CMD_VIEWMATRIXDATA:
-		DEBUG_LOG(G3D,"DL VIEW matrix data # %f", getFloat24(data));
-		gstate.viewMatrix[gstate.viewmtxnum++] = getFloat24(data);
+		{
+			int num = gstate.viewmtxnum & 0xF;
+			if (num < 12) {
+				gstate.viewMatrix[num] = getFloat24(data);
+			}
+			gstate.viewmtxnum = (++num) & 0xF;
+		}
 		break;
 
 	case GE_CMD_PROJMATRIXNUMBER:
-		DEBUG_LOG(G3D,"DL PROJECTION matrix # %i", data);
 		gstate.projmtxnum = data&0xF;
 		break;
 
 	case GE_CMD_PROJMATRIXDATA:
-		DEBUG_LOG(G3D,"DL PROJECTION matrix data # %f", getFloat24(data));
-		gstate.projMatrix[gstate.projmtxnum++] = getFloat24(data);
+		{
+			int num = gstate.projmtxnum & 0xF;
+			gstate.projMatrix[num] = getFloat24(data);
+			gstate.projmtxnum = (++num) & 0xF;
+		}
 		break;
 
 	case GE_CMD_TGENMATRIXNUMBER:
-		DEBUG_LOG(G3D,"DL TGEN matrix # %i", data);
 		gstate.texmtxnum = data&0xF;
 		break;
 
 	case GE_CMD_TGENMATRIXDATA:
-		DEBUG_LOG(G3D,"DL TGEN matrix data # %f", getFloat24(data));
-		gstate.tgenMatrix[gstate.texmtxnum++] = getFloat24(data);
+		{
+			int num = gstate.texmtxnum & 0xF;
+			if (num < 12) {
+				gstate.tgenMatrix[num] = getFloat24(data);
+			}
+			gstate.texmtxnum = (++num) & 0xF;
+		}
 		break;
 
 	case GE_CMD_BONEMATRIXNUMBER:
-		DEBUG_LOG(G3D,"DL BONE matrix #%i", data);
-		gstate.boneMatrixNumber = data;
+		gstate.boneMatrixNumber = data & 0x7F;
 		break;
 
 	case GE_CMD_BONEMATRIXDATA:
-		DEBUG_LOG(G3D,"DL BONE matrix data #%i %f", gstate.boneMatrixNumber, getFloat24(data));
-		gstate.boneMatrix[gstate.boneMatrixNumber++] = getFloat24(data);
+		{
+			int num = gstate.boneMatrixNumber & 0x7F;
+			if (num < 96) {
+				gstate.boneMatrix[num] = getFloat24(data);
+			}
+			gstate.boneMatrixNumber = (++num) & 0x7F;
+		}
 		break;
 
 	default:
@@ -644,21 +651,18 @@ void NullGPU::ExecuteOp(u32 op, u32 diff)
 	}
 }
 
-void NullGPU::UpdateStats()
-{
+void NullGPU::UpdateStats() {
 	gpuStats.numVertexShaders = 0;
 	gpuStats.numFragmentShaders = 0;
 	gpuStats.numShaders = 0;
 	gpuStats.numTextures = 0;
 }
 
-void NullGPU::InvalidateCache(u32 addr, int size, GPUInvalidationType type)
-{
+void NullGPU::InvalidateCache(u32 addr, int size, GPUInvalidationType type) {
 	// Nothing to invalidate.
 }
 
-void NullGPU::UpdateMemory(u32 dest, u32 src, int size)
-{
+void NullGPU::UpdateMemory(u32 dest, u32 src, int size) {
 	// Nothing to update.
 	InvalidateCache(dest, size, GPU_INVALIDATE_HINT);
 }

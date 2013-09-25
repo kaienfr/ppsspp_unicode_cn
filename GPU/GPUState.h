@@ -340,6 +340,9 @@ struct GPUgstate
 	unsigned int getSpecularColorG(int chan) const { return (lcolor[2+chan*3]>>8)&0xFF; }
 	unsigned int getSpecularColorB(int chan) const { return (lcolor[2+chan*3]>>16)&0xFF; }
 
+	int getPatchDivisionU() const { return patchdivision & 0x7F; }
+	int getPatchDivisionV() const { return (patchdivision >> 8) & 0x7F; }
+
 	// UV gen
 	GETexMapMode getUVGenMode() const { return static_cast<GETexMapMode>(texmapmode & 3);}   // 2 bits
 	GETexProjMapMode getUVProjMode() const { return static_cast<GETexProjMapMode>((texmapmode >> 8) & 3);}   // 2 bits
@@ -368,10 +371,6 @@ struct GPUgstate
 
 	// Vertex type
 	bool isModeThrough() const { return (vertType & GE_VTYPE_THROUGH) != 0; }
-	int getWeightMask() const { return vertType & GE_VTYPE_WEIGHT_MASK; }
-	int getNumBoneWeights() const { return 1 + ((vertType & GE_VTYPE_WEIGHTCOUNT_MASK) >> GE_VTYPE_WEIGHTCOUNT_SHIFT); }
-	bool isSkinningEnabled() const { return ((vertType & GE_VTYPE_WEIGHT_MASK) != GE_VTYPE_WEIGHT_NONE); }
-	int getTexCoordMask() const { return vertType & GE_VTYPE_TC_MASK; }
 	bool areNormalsReversed() const { return reversenormals & 1; }
 
 	GEPatchPrimType getPatchPrimitiveType() const { return static_cast<GEPatchPrimType>(patchprimitive & 3); }
@@ -400,6 +399,12 @@ enum SkipDrawReasonFlags {
 	SKIPDRAW_NON_DISPLAYED_FB = 2,   // Skip drawing to FBO:s that have not been displayed.
 	SKIPDRAW_BAD_FB_TEXTURE = 4,
 };
+
+inline bool vertTypeIsSkinningEnabled(u32 vertType) { return ((vertType & GE_VTYPE_WEIGHT_MASK) != GE_VTYPE_WEIGHT_NONE); }
+inline int vertTypeGetNumBoneWeights(u32 vertType) { return 1 + ((vertType & GE_VTYPE_WEIGHTCOUNT_MASK) >> GE_VTYPE_WEIGHTCOUNT_SHIFT); }
+inline int vertTypeGetWeightMask(u32 vertType) { return vertType & GE_VTYPE_WEIGHT_MASK; }
+inline int vertTypeGetTexCoordMask(u32 vertType) { return vertType & GE_VTYPE_TC_MASK; }
+
 
 // The rest is cached simplified/converted data for fast access.
 // Does not need to be saved when saving/restoring context.
@@ -511,10 +516,12 @@ void ShutdownGfxState();
 void ReapplyGfxState();
 
 class GPUInterface;
+class GPUDebugInterface;
 
 extern GPUgstate gstate;
 extern GPUStateCache gstate_c;
 extern GPUInterface *gpu;
+extern GPUDebugInterface *gpuDebug;
 extern GPUStatistics gpuStats;
 
 inline u32 GPUStateCache::getRelativeAddress(u32 data) const {

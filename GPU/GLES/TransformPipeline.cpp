@@ -56,6 +56,7 @@ enum {
 	TRANSFORMED_VERTEX_BUFFER_SIZE = 65536 * sizeof(TransformedVertex)
 };
 
+#define QUAD_INDICES_MAX 32768
 
 #define VERTEXCACHE_DECIMATION_INTERVAL 17
 
@@ -82,6 +83,17 @@ TransformDrawEngine::TransformDrawEngine()
 	decIndex = (u16 *)AllocateMemoryPages(DECODED_INDEX_BUFFER_SIZE);
 	transformed = (TransformedVertex *)AllocateMemoryPages(TRANSFORMED_VERTEX_BUFFER_SIZE);
 	transformedExpanded = (TransformedVertex *)AllocateMemoryPages(3 * TRANSFORMED_VERTEX_BUFFER_SIZE);
+	quadIndices_ = new u16[6 * QUAD_INDICES_MAX];
+
+	for (int i = 0; i < QUAD_INDICES_MAX; i++) {
+		quadIndices_[i * 6 + 0] = i * 4;
+		quadIndices_[i * 6 + 1] = i * 4 + 2;
+		quadIndices_[i * 6 + 2] = i * 4 + 1;
+		quadIndices_[i * 6 + 3] = i * 4 + 1;
+		quadIndices_[i * 6 + 4] = i * 4 + 2;
+		quadIndices_[i * 6 + 5] = i * 4 + 3;
+	}
+
 	if (g_Config.bPrescaleUV) {
 		uvScale = new UVScale[MAX_DEFERRED_DRAW_CALLS];
 	}
@@ -98,6 +110,8 @@ TransformDrawEngine::~TransformDrawEngine() {
 	FreeMemoryPages(decIndex, DECODED_INDEX_BUFFER_SIZE);
 	FreeMemoryPages(transformed, TRANSFORMED_VERTEX_BUFFER_SIZE);
 	FreeMemoryPages(transformedExpanded, 3 * TRANSFORMED_VERTEX_BUFFER_SIZE);
+	delete [] quadIndices_;
+
 	unregister_gl_resource_holder(this);
 	for (auto iter = decoderMap_.begin(); iter != decoderMap_.end(); iter++) {
 		delete iter->second;
@@ -490,7 +504,7 @@ void TransformDrawEngine::SoftwareTransformAndDraw(
 			if (reader.hasNormal())
 				reader.ReadNrm(nrm);
 
-			if (!gstate.isSkinningEnabled()) {
+			if (!vertTypeIsSkinningEnabled(vertType)) {
 				Vec3ByMatrix43(out, pos, gstate.worldMatrix);
 				if (reader.hasNormal()) {
 					Norm3ByMatrix43(norm, nrm, gstate.worldMatrix);
@@ -502,7 +516,7 @@ void TransformDrawEngine::SoftwareTransformAndDraw(
 				// Skinning
 				Vec3f psum(0,0,0);
 				Vec3f nsum(0,0,0);
-				for (int i = 0; i < gstate.getNumBoneWeights(); i++) {
+				for (int i = 0; i < vertTypeGetNumBoneWeights(vertType); i++) {
 					if (weights[i] != 0.0f) {
 						Vec3ByMatrix43(out, pos, gstate.boneMatrix+i*12);
 						Vec3f tpos(out);
@@ -1042,7 +1056,7 @@ void TransformDrawEngine::DoFlush() {
 	GEPrimitiveType prim = prevPrim_;
 	ApplyDrawState(prim);
 
-	LinkedShader *program = shaderManager_->ApplyShader(prim);
+	LinkedShader *program = shaderManager_->ApplyShader(prim, lastVType_);
 
 	if (program->useHWTransform_) {
 		GLuint vbo = 0, ebo = 0;
@@ -1228,4 +1242,55 @@ rotateVBO:
 	collectedVerts = 0;
 	numDrawCalls = 0;
 	prevPrim_ = GE_PRIM_INVALID;
+
+#ifndef USING_GLES2
+	host->GPUNotifyDraw();
+#endif
+}
+
+bool TransformDrawEngine::TestBoundingBox(void* control_points, int vertexCount, u32 vertType) {
+	// Simplify away bones and morph before proceeding
+
+	/*
+	SimpleVertex *corners = (SimpleVertex *)(decoded + 65536 * 12);
+	u8 *temp_buffer = decoded + 65536 * 24;
+
+	u32 origVertType = vertType;
+	vertType = NormalizeVertices((u8 *)corners, temp_buffer, (u8 *)control_points, 0, vertexCount, vertType);
+
+	for (int cube = 0; cube < vertexCount / 8; cube++) {
+		// For each cube...
+		
+		for (int i = 0; i < 8; i++) {
+			const SimpleVertex &vert = corners[cube * 8 + i];
+
+			// To world space...
+			float worldPos[3];
+			Vec3ByMatrix43(worldPos, (float *)&vert.pos.x, gstate.worldMatrix);
+
+			// To view space...
+			float viewPos[3];
+			Vec3ByMatrix43(viewPos, worldPos, gstate.viewMatrix);
+
+			// And finally to screen space.
+			float frustumPos[4];
+			Vec3ByMatrix44(frustumPos, viewPos, gstate.projMatrix);
+
+			// Project to 2D
+			float x = frustumPos[0] / frustumPos[3];
+			float y = frustumPos[1] / frustumPos[3];
+
+			// Rescale 2d position
+			// ...
+		}
+	}
+	*/
+
+	
+	// Let's think. A better approach might be to take the edges of the drawing region and the projection
+	// matrix to build a frustum pyramid, and then clip the cube against those planes. If all vertices fail the same test,
+	// the cube is out. Otherwise it's in.
+	// TODO....
+	
+	return true;
 }

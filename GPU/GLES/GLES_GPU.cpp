@@ -111,7 +111,7 @@ static const CommandTableEntry commandTable[] = {
 	{GE_CMD_CLEARMODE, FLAG_FLUSHBEFOREONCHANGE},
 	{GE_CMD_TEXTUREMAPENABLE, FLAG_FLUSHBEFOREONCHANGE | FLAG_EXECUTE},
 	{GE_CMD_FOGENABLE, FLAG_FLUSHBEFOREONCHANGE},
-	{GE_CMD_TEXMODE, FLAG_FLUSHBEFOREONCHANGE},
+	{GE_CMD_TEXMODE, FLAG_FLUSHBEFOREONCHANGE | FLAG_EXECUTE},
 	{GE_CMD_TEXSHADELS, FLAG_FLUSHBEFOREONCHANGE},
 	{GE_CMD_SHADEMODE, FLAG_FLUSHBEFOREONCHANGE},
 	{GE_CMD_TEXFUNC, FLAG_FLUSHBEFOREONCHANGE},
@@ -135,8 +135,8 @@ static const CommandTableEntry commandTable[] = {
 
 	// This changes both shaders so need flushing.
 	{GE_CMD_LIGHTMODE, FLAG_FLUSHBEFOREONCHANGE},
-	{GE_CMD_TEXFILTER, FLAG_FLUSHBEFOREONCHANGE},
-	{GE_CMD_TEXWRAP, FLAG_FLUSHBEFOREONCHANGE},
+	{GE_CMD_TEXFILTER, FLAG_FLUSHBEFOREONCHANGE | FLAG_EXECUTE},
+	{GE_CMD_TEXWRAP, FLAG_FLUSHBEFOREONCHANGE | FLAG_EXECUTE},
 
 	// Uniform changes
 	{GE_CMD_ALPHATEST, FLAG_FLUSHBEFOREONCHANGE | FLAG_EXECUTE},
@@ -144,8 +144,10 @@ static const CommandTableEntry commandTable[] = {
 	{GE_CMD_TEXENVCOLOR, FLAG_FLUSHBEFOREONCHANGE | FLAG_EXECUTE},
 
 	// Simple render state changes. Handled in StateMapping.cpp.
-	{GE_CMD_SCISSOR1, FLAG_FLUSHBEFOREONCHANGE},
-	{GE_CMD_SCISSOR2, FLAG_FLUSHBEFOREONCHANGE},
+	{GE_CMD_SCISSOR1, FLAG_FLUSHBEFOREONCHANGE | FLAG_EXECUTE},
+	{GE_CMD_SCISSOR2, FLAG_FLUSHBEFOREONCHANGE | FLAG_EXECUTE},
+	{GE_CMD_OFFSETX, FLAG_FLUSHBEFOREONCHANGE},
+	{GE_CMD_OFFSETY, FLAG_FLUSHBEFOREONCHANGE},
 	{GE_CMD_CULL, FLAG_FLUSHBEFOREONCHANGE},
 	{GE_CMD_CULLFACEENABLE, FLAG_FLUSHBEFOREONCHANGE},
 	{GE_CMD_DITHERENABLE, FLAG_FLUSHBEFOREONCHANGE},
@@ -195,9 +197,6 @@ static const CommandTableEntry commandTable[] = {
 	{GE_CMD_VIEWPORTY2, FLAG_FLUSHBEFOREONCHANGE | FLAG_EXECUTE},
 	{GE_CMD_VIEWPORTZ1, FLAG_FLUSHBEFOREONCHANGE | FLAG_EXECUTE},
 	{GE_CMD_VIEWPORTZ2, FLAG_FLUSHBEFOREONCHANGE | FLAG_EXECUTE},
-
-	{GE_CMD_OFFSETX, FLAG_FLUSHBEFOREONCHANGE},
-	{GE_CMD_OFFSETY, FLAG_FLUSHBEFOREONCHANGE},
 
 	// These dirty various vertex shader uniforms. Could embed information about that in this table and call dirtyuniform directly, hm...
 	{GE_CMD_AMBIENTCOLOR, FLAG_FLUSHBEFOREONCHANGE | FLAG_EXECUTE},
@@ -276,7 +275,7 @@ static const CommandTableEntry commandTable[] = {
 	{GE_CMD_CLIPENABLE, 0},
 	{GE_CMD_TEXFLUSH, 0},
 	{GE_CMD_TEXLODSLOPE, 0},
-	{GE_CMD_TEXLEVEL, 0},  // we don't support this anyway, no need to flush.
+	{GE_CMD_TEXLEVEL, FLAG_EXECUTE},  // we don't support this anyway, no need to flush.
 	{GE_CMD_TEXSYNC, 0},
 
 	// These are just nop or part of other later commands.
@@ -336,22 +335,23 @@ static const CommandTableEntry commandTable[] = {
 	{GE_CMD_BONEMATRIXDATA,    FLAG_EXECUTE},
 
 	// "Missing" commands (gaps in the sequence)
-	{0x03},
-	{0x0d},
-	{0x11},
-	{0x29},
-	{0x34},
-	{0x35},
-	{0x39},
-	{0x4e},
-	{0x4f},
-	{0x52},
-	{0x59},
-	{0x5a},
-	{0xb6},
-	{0xb7},
-	{0xd1},
-	{0xed},
+	// "Missing" commands (gaps in the sequence)
+	{GE_CMD_UNKNOWN_03, FLAG_EXECUTE},
+	{GE_CMD_UNKNOWN_0D, FLAG_EXECUTE},
+	{GE_CMD_UNKNOWN_11, FLAG_EXECUTE},
+	{GE_CMD_UNKNOWN_29, FLAG_EXECUTE},
+	{GE_CMD_UNKNOWN_34, FLAG_EXECUTE},
+	{GE_CMD_UNKNOWN_35, FLAG_EXECUTE},
+	{GE_CMD_UNKNOWN_39, FLAG_EXECUTE},
+	{GE_CMD_UNKNOWN_4E, FLAG_EXECUTE},
+	{GE_CMD_UNKNOWN_4F, FLAG_EXECUTE},
+	{GE_CMD_UNKNOWN_52, FLAG_EXECUTE},
+	{GE_CMD_UNKNOWN_59, FLAG_EXECUTE},
+	{GE_CMD_UNKNOWN_5A, FLAG_EXECUTE},
+	{GE_CMD_UNKNOWN_B6, FLAG_EXECUTE},
+	{GE_CMD_UNKNOWN_B7, FLAG_EXECUTE},
+	{GE_CMD_UNKNOWN_D1, FLAG_EXECUTE},
+	{GE_CMD_UNKNOWN_ED, FLAG_EXECUTE},
 };
 
 
@@ -517,6 +517,7 @@ void GLES_GPU::BeginFrameInternal() {
 }
 
 void GLES_GPU::SetDisplayFramebuffer(u32 framebuf, u32 stride, GEBufferFormat format) {
+	host->GPUNotifyDisplay(framebuf, stride, format);
 	framebufferManager_.SetDisplayFramebuffer(framebuf, stride, format);
 }
 
@@ -670,18 +671,19 @@ void GLES_GPU::ExecuteOp(u32 op, u32 diff) {
 				
 			// Discard AA lines as we can't do anything that makes sense with these anyway. The SW plugin might, though.
 			
-			// Discard AA lines in DOA
-			if ((prim == GE_PRIM_LINE_STRIP) && gstate.isAntiAliasEnabled())
-				break;
 
-			// Discard AA lines in Summon Night 5
-			if ((prim == GE_PRIM_LINES) && gstate.isAntiAliasEnabled() && gstate.isSkinningEnabled())
-				break;
+			if (gstate.isAntiAliasEnabled()) {
+				// Discard AA lines in DOA
+				if (prim == GE_PRIM_LINE_STRIP)
+					break;
+				// Discard AA lines in Summon Night 5
+				if ((prim == GE_PRIM_LINES) && vertTypeIsSkinningEnabled(gstate.vertType))
+					break;
+			}
 
 			// This also make skipping drawing very effective.
 			framebufferManager_.SetRenderFrameBuffer();
-			if (gstate_c.skipDrawReason & (SKIPDRAW_SKIPFRAME | SKIPDRAW_NON_DISPLAYED_FB))
-			{
+			if (gstate_c.skipDrawReason & (SKIPDRAW_SKIPFRAME | SKIPDRAW_NON_DISPLAYED_FB))	{
 				transformDraw_.SetupVertexDecoder(gstate.vertType);
 				// Rough estimate, not sure what's correct.
 				int vertexCost = transformDraw_.EstimatePerVertexCost();
@@ -759,18 +761,14 @@ void GLES_GPU::ExecuteOp(u32 op, u32 diff) {
 			if (gstate.vertType & GE_VTYPE_MORPHCOUNT_MASK) {
 				DEBUG_LOG_REPORT(G3D, "Bezier + morph: %i", (gstate.vertType & GE_VTYPE_MORPHCOUNT_MASK) >> GE_VTYPE_MORPHCOUNT_SHIFT);
 			}
-			if (gstate.isSkinningEnabled()) {
-				DEBUG_LOG_REPORT(G3D, "Bezier + skinning: %i", gstate.getNumBoneWeights());
+			if (vertTypeIsSkinningEnabled(gstate.vertType)) {
+				DEBUG_LOG_REPORT(G3D, "Bezier + skinning: %i", vertTypeGetNumBoneWeights(gstate.vertType));
 			}
 
-			// TODO: Get rid of this old horror...
+			GEPatchPrimType patchPrim = gstate.getPatchPrimitiveType();
 			int bz_ucount = data & 0xFF;
 			int bz_vcount = (data >> 8) & 0xFF;
-			transformDraw_.DrawBezier(bz_ucount, bz_vcount);
-
-			// And instead use this.
-			// GEPatchPrimType patchPrim = gstate.getPatchPrimitiveType();
-			// transformDraw_.SubmitBezier(control_points, indices, sp_ucount, sp_vcount, patchPrim, gstate.vertType);
+			transformDraw_.SubmitBezier(control_points, indices, bz_ucount, bz_vcount, patchPrim, gstate.vertType);
 		}
 		break;
 
@@ -799,8 +797,8 @@ void GLES_GPU::ExecuteOp(u32 op, u32 diff) {
 			if (gstate.vertType & GE_VTYPE_MORPHCOUNT_MASK) {
 				DEBUG_LOG_REPORT(G3D, "Spline + morph: %i", (gstate.vertType & GE_VTYPE_MORPHCOUNT_MASK) >> GE_VTYPE_MORPHCOUNT_SHIFT);
 			}
-			if (gstate.isSkinningEnabled()) {
-				DEBUG_LOG_REPORT(G3D, "Spline + skinning: %i", gstate.getNumBoneWeights());
+			if (vertTypeIsSkinningEnabled(gstate.vertType)) {
+				DEBUG_LOG_REPORT(G3D, "Spline + skinning: %i", vertTypeGetNumBoneWeights(gstate.vertType));
 			}
 
 			int sp_ucount = data & 0xFF;
@@ -812,12 +810,23 @@ void GLES_GPU::ExecuteOp(u32 op, u32 diff) {
 		}
 		break;
 
-	case GE_CMD_BJUMP:
-		// bounding box jump. Let's just not jump, for now.
-		break;
-
 	case GE_CMD_BOUNDINGBOX:
-		// bounding box test. Let's do nothing.
+		if ((data % 8 == 0) && data < 64) {  // Sanity check
+			void *control_points = Memory::GetPointer(gstate_c.vertexAddr);
+			if (gstate.vertType & GE_VTYPE_IDX_MASK) {
+				ERROR_LOG_REPORT_ONCE(boundingbox, G3D, "Indexed bounding box data not supported.");
+				// Data seems invalid. Let's assume the box test passed.
+				currentList->bboxResult = true;
+				break;
+			}
+
+			// Test if the bounding box is within the drawing region.
+			currentList->bboxResult = transformDraw_.TestBoundingBox(control_points, data, gstate.vertType);
+		} else {
+			ERROR_LOG_REPORT_ONCE(boundingbox, G3D, "Bad bounding box data: %06x", data);
+			// Data seems invalid. Let's assume the box test passed.
+			currentList->bboxResult = true;
+		}
 		break;
 
 	case GE_CMD_VERTEXTYPE:
@@ -987,7 +996,7 @@ void GLES_GPU::ExecuteOp(u32 op, u32 diff) {
 			// Can we skip this on SkipDraw?
 			DoBlockTransfer();
 
-			// Fixes Gran Turismo's funky text issue.
+			// Fixes Gran Turismo's funky text issue, since it overwrites the current texture.
 			gstate_c.textureChanged = true;
 			break;
 		}
@@ -1201,11 +1210,15 @@ void GLES_GPU::ExecuteOp(u32 op, u32 diff) {
 		break;
 
 	case GE_CMD_TEXFUNC:
-	case GE_CMD_TEXFILTER:
+	case GE_CMD_TEXFLUSH:
+		break;
+
 	case GE_CMD_TEXMODE:
 	case GE_CMD_TEXFORMAT:
-	case GE_CMD_TEXFLUSH:
+	case GE_CMD_TEXFILTER:
 	case GE_CMD_TEXWRAP:
+		if (diff)
+			gstate_c.textureChanged = true;
 		break;
 
 	//////////////////////////////////////////////////////////////////
@@ -1350,9 +1363,31 @@ void GLES_GPU::ExecuteOp(u32 op, u32 diff) {
 			WARN_LOG_REPORT_ONCE(texLevel1, G3D, "Unsupported texture level bias settings: %06x", data)
 		else if (data != 0)
 			WARN_LOG_REPORT_ONCE(texLevel2, G3D, "Unsupported texture level bias settings: %06x", data);
+		if (diff)
+			gstate_c.textureChanged = true;
 		break;
 #endif
 
+	case GE_CMD_UNKNOWN_03: 
+	case GE_CMD_UNKNOWN_0D:
+	case GE_CMD_UNKNOWN_11:
+	case GE_CMD_UNKNOWN_29:
+	case GE_CMD_UNKNOWN_34:
+	case GE_CMD_UNKNOWN_35:
+	case GE_CMD_UNKNOWN_39:
+	case GE_CMD_UNKNOWN_4E:
+	case GE_CMD_UNKNOWN_4F:
+	case GE_CMD_UNKNOWN_52:
+	case GE_CMD_UNKNOWN_59:
+	case GE_CMD_UNKNOWN_5A:
+	case GE_CMD_UNKNOWN_B6:
+	case GE_CMD_UNKNOWN_B7:
+	case GE_CMD_UNKNOWN_D1:
+	case GE_CMD_UNKNOWN_ED:
+		if (data != 0)
+			WARN_LOG_REPORT_ONCE(unknowncmd, G3D, "Unknown GE command : %08x ", op);
+		break;
+		
 	default:
 		GPUCommon::ExecuteOp(op, diff);
 		break;
@@ -1478,4 +1513,9 @@ void GLES_GPU::DoState(PointerWrap &p) {
 
 	gstate_c.textureChanged = true;
 	framebufferManager_.DestroyAllFBOs();
+}
+
+bool GLES_GPU::GetCurrentFramebuffer(GPUDebugBuffer &buffer)
+{
+	return framebufferManager_.GetCurrentFramebuffer(buffer);
 }

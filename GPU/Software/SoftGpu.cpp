@@ -364,10 +364,11 @@ void SoftGPU::ExecuteOp(u32 op, u32 diff)
 		}
 		break;
 
-	case GE_CMD_BJUMP:
-		break;
-
 	case GE_CMD_BOUNDINGBOX:
+		if (data != 0)
+			DEBUG_LOG(G3D, "Unsupported bounding box: %06x", data);
+		// bounding box test. Let's assume the box was within the drawing region.
+		currentList->bboxResult = true;
 		break;
 
 	case GE_CMD_VERTEXTYPE:
@@ -742,4 +743,12 @@ void SoftGPU::UpdateMemory(u32 dest, u32 src, int size)
 {
 	// Nothing to update.
 	InvalidateCache(dest, size, GPU_INVALIDATE_HINT);
+}
+
+bool SoftGPU::GetCurrentFramebuffer(GPUDebugBuffer &buffer)
+{
+	// We don't know the height, so just use 512, which should be the max (hopefully?)
+	// TODO: Could check clipping and such, though...?
+	buffer = GPUDebugBuffer(fb.data, gstate.FrameBufStride(), 512, gstate.FrameBufFormat());
+	return true;
 }

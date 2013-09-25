@@ -37,8 +37,10 @@
 #include "Windows/resource.h"
 
 #include "Windows/WndMainWindow.h"
+#include "Windows/Debugger/Debugger_Disasm.h"
 #include "Windows/Debugger/Debugger_MemoryDlg.h"
 #include "Windows/Debugger/Debugger_VFPUDlg.h"
+#include "Windows/GEDebugger/GEDebugger.h"
 
 #include "Windows/W32Util/DialogManager.h"
 
@@ -50,6 +52,7 @@
 #include "Windows/main.h"
 
 CDisasm *disasmWindow[MAX_CPUCOUNT] = {0};
+CGEDebugger *geDebuggerWindow = 0;
 CMemoryDlg *memoryWindow[MAX_CPUCOUNT] = {0};
 
 static std::string langRegion;
@@ -98,7 +101,7 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 	// Really should find a way to do this in XP too :/
 	if (0 != GetLocaleInfo(LOCALE_NAME_USER_DEFAULT, LOCALE_SNAME, lcCountry, 256)) {
 		langRegion = ConvertWStringToUTF8(lcCountry);
-		for (int i = 0; i < langRegion.size(); i++) {
+		for (size_t i = 0; i < langRegion.size(); i++) {
 			if (langRegion[i] == '-')
 				langRegion[i] = '_';
 		}
